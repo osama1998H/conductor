@@ -99,6 +99,7 @@ def run(*, demo: bool = False) -> int:
             if "echo" not in preview:
                 raise RuntimeError("result_preview missing echo")
             frappe.delete_doc("Conductor Job", jid, force=True)
+            frappe.db.commit()
             return "round-trip preserved"
 
         ok &= _step("[5/6] End-to-end demo dispatch (conductor.demo.echo)", step_dispatch)
