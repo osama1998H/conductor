@@ -20,6 +20,13 @@ def test_roundtrip_datetime_aware():
     assert out["when"].tzinfo is not None
 
 
+def test_roundtrip_datetime_naive_becomes_utc():
+    naive = datetime(2026, 1, 1, 12, 0, 0)  # no tzinfo
+    out = loads(dumps({"dt": naive}))
+    assert out["dt"] == naive.replace(tzinfo=timezone.utc)
+    assert out["dt"].tzinfo == timezone.utc
+
+
 def test_roundtrip_decimal():
     out = loads(dumps({"amount": Decimal("123.45")}))
     assert out["amount"] == Decimal("123.45")

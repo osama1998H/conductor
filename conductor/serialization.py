@@ -45,4 +45,5 @@ def dumps(obj: Any, *, max_bytes: int = DEFAULT_MAX_BYTES) -> bytes:
 
 
 def loads(data: bytes) -> Any:
+    """Unpack msgpack bytes, restoring datetime and Decimal extension types."""
     return msgpack.unpackb(data, ext_hook=_ext_hook, raw=False)
