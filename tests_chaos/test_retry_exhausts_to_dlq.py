@@ -31,9 +31,13 @@ def test_retry_exhausts_to_dlq_under_chaos(spawn_worker):
         except (ProcessLookupError, PermissionError):
             pass
 
-    # A new worker handles the rest of the retry chain.
+    # A new worker handles the rest of the retry chain. Generous timeout: the
+    # full chain involves XAUTOCLAIM idle window (8s), 3 retry-delay windows
+    # (each base_delay*2^attempt with full jitter, total up to ~14s), drainer
+    # latency (~1s per cycle), and Frappe DB roundtrips. On a busy host this
+    # can take well over a minute.
     with spawn_worker() as worker_b:
-        final = wait_for_status(job_id, "DLQ", timeout=90)
+        final = wait_for_status(job_id, "DLQ", timeout=180)
         assert final == "DLQ", f"expected DLQ, got {final}"
 
         # Three Job Run rows (some may be TIMED_OUT from the reclaim race;
