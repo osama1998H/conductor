@@ -4,6 +4,8 @@ from datetime import datetime, timezone
 
 import pytest
 
+from croniter import CroniterBadCronError
+
 from conductor.cron import compute_next_run_at
 
 
@@ -52,7 +54,7 @@ def test_unknown_timezone_falls_back_to_utc():
 
 
 def test_malformed_expression_raises():
-    with pytest.raises(Exception):
+    with pytest.raises(CroniterBadCronError):
         compute_next_run_at("not a cron", "UTC")
 
 

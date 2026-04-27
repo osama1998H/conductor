@@ -6,10 +6,13 @@ after base = now, so missed runs are silently dropped.
 
 from __future__ import annotations
 
+import logging
 import zoneinfo
 from datetime import datetime, timezone
 
 from croniter import croniter
+
+_log = logging.getLogger(__name__)
 
 
 def compute_next_run_at(
@@ -30,6 +33,7 @@ def compute_next_run_at(
     try:
         tz = zoneinfo.ZoneInfo(tz_name or "UTC")
     except zoneinfo.ZoneInfoNotFoundError:
+        _log.warning("compute_next_run_at: unknown tz %r, falling back to UTC", tz_name)
         tz = zoneinfo.ZoneInfo("UTC")
     base_local = base.astimezone(tz)
     itr = croniter(cron_expression, base_local)
