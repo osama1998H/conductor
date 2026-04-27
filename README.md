@@ -2,6 +2,9 @@
 
 Reliability-first background job platform for Frappe / ERPNext.
 
+![image](conductor.png)
+
+
 Phase 0 ships the skeleton: dispatcher, worker, doctor, and the three core
 DocTypes (`Conductor Queue`, `Conductor Job`, `Conductor Worker`). No retries,
 no DLQ, no scheduler — those land in Phase 1+.
