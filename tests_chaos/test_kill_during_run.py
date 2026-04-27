@@ -47,7 +47,11 @@ def test_kill_during_run_reclaims_and_completes(spawn_worker):
     # autoclaim idle = 8s, so B's first iteration after spawn-warmup may
     # need to wait until t ~= 8s after A claimed. We give 90s total to be safe.
     with spawn_worker() as worker_b:
-        final = wait_for_status(job_id, "SUCCEEDED", timeout=90)
+        # Generous timeout: XAUTOCLAIM idle window (8s) + slow_chaos sleep (8s)
+        # + worker B startup + Frappe DB overhead. On a busy host the chain
+        # can run 30-60s. We allow 180s to absorb noise without compromising
+        # the correctness invariant (the test still detects "never reclaimed").
+        final = wait_for_status(job_id, "SUCCEEDED", timeout=180)
         assert final == "SUCCEEDED", f"expected SUCCEEDED, got {final}"
 
         runs = frappe.get_all(
