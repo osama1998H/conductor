@@ -1,0 +1,11 @@
+{
+ "creation": "2026-04-27 00:00:00",
+ "desk_access": 1,
+ "doctype": "Role",
+ "modified": "2026-04-27 00:00:00",
+ "modified_by": "Administrator",
+ "module": "Conductor",
+ "name": "Conductor Operator",
+ "owner": "Administrator",
+ "role_name": "Conductor Operator"
+}
