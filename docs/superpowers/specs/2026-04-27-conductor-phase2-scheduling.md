@@ -33,7 +33,7 @@ These seven decisions are inputs to the spec. They cannot be relitigated inside 
 |---|---|---|---|
 | 1 | Residual chaos 5-run flake gate | **In scope.** Phase 2 ships a fix; chaos exit criterion includes a green 5-run gate. | Carry-over from master Phase 2 hand-off §3 — best resolved while we're already touching `tests_chaos/`. |
 | 2 | `OrphanSweeper` placement | **Move to scheduler.** Worker no longer runs it. | Single-owner background hygiene; eliminates N workers running the same DB query every 30 s. |
-| 3 | Cron parser | **`croniter>=2,<3`** added to install_requires. | De-facto Python cron lib; mature DST/tz handling; minimal transitive deps. |
+| 3 | Cron parser | **`croniter>=2,<7`** added to install_requires. | De-facto Python cron lib; mature DST/tz handling; minimal transitive deps. |
 | 4 | Singleton lock model | **TTL=15 s, renew every 5 s, poll every 5 s, lost-lock fence → exit process.** Renewal is Lua check-and-PEXPIRE. | Worst-case takeover ~20 s — comfortably inside master's "~30 s" target with margin for a single missed renewal. |
 | 5 | `schedule run-now` | **Calls `conductor.enqueue(...)` directly.** Forward link via `Conductor Schedule.last_job`. | One enqueue path; no schema amendment to master §6.2. |
 | 6 | Reaper scope | **Marks workers `STALE`/`GONE` and prunes rows >7 days old.** Does NOT XAUTOCLAIM on behalf of dead workers. | Workers' own per-iteration XAUTOCLAIM covers steady-state; "all workers dead" is an operability problem, not a recovery problem. |
@@ -505,7 +505,7 @@ apps/conductor/conductor/scheduled.py         # drop DelayDrainer class; keep he
 apps/conductor/conductor/sweeper.py           # drop OrphanSweeper class; keep helpers
 apps/conductor/conductor/commands/__init__.py # register two new commands
 apps/conductor/conductor/modules.txt          # (no change — Conductor module already exists)
-apps/conductor/pyproject.toml                 # add croniter>=2,<3 to install_requires
+apps/conductor/pyproject.toml                 # add croniter>=2,<7 to install_requires
 apps/conductor/tests_chaos/conftest.py        # XGROUP DESTROY per-test + tighter teardown
 ```
 

@@ -10,7 +10,7 @@
 - Python 3.10+ (bench env)
 - Frappe 15.106.0
 - redis-py ≥5 (Streams + ZSET + SET NX EX + EVAL)
-- **croniter ≥2,<3** (NEW — added to install_requires)
+- **croniter ≥2,<7** (NEW — added to install_requires)
 - msgpack ≥1, structlog, opentelemetry-{api,sdk}
 - pytest, fakeredis, lupa (Lua/EVAL in fakeredis), pytest-mock — already in `[dev]`
 - pytest-repeat (NEW dev dep — for the 5-run flake gate)
@@ -68,7 +68,7 @@ dependencies = [
     "opentelemetry-api>=1.27,<2",
     "opentelemetry-sdk>=1.27,<2",
     "structlog>=24.1,<26",
-    "croniter>=2,<3",
+    "croniter>=2,<7",
 ]
 
 [project.optional-dependencies]
@@ -116,7 +116,7 @@ Expected: a Unix timestamp printed (some float).
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/osamamuhammed/frappe_15/apps/conductor && git add pyproject.toml && git commit -m "build(deps): add croniter>=2,<3 + pytest-repeat>=0.9,<1 for Phase 2"
+cd /Users/osamamuhammed/frappe_15/apps/conductor && git add pyproject.toml && git commit -m "build(deps): add croniter>=2,<7 + pytest-repeat>=0.9,<1 for Phase 2"
 ```
 
 ---
