@@ -26,6 +26,7 @@ from conductor.logging import get_logger
 from conductor.scheduled import drain_due_messages
 from conductor.serialization import loads as msgpack_loads
 from conductor.streams import ensure_consumer_group, stream_key
+from conductor.sweeper import sweep_orphans
 
 log = get_logger("conductor.scheduler_loops")
 
@@ -186,6 +187,36 @@ def _reaper_loop(stop_event: threading.Event, lost_lock_event: threading.Event,
     log.info("reaper_loop_stopped", site=site)
 
 
+# --- sweeper ------------------------------------------------------------------
+
+SWEEPER_LOOP_INTERVAL_SECONDS = 30.0
+
+
+def _sweeper_loop_iter(redis_client: redis_mod.Redis, site: str) -> int:
+    """One sweep pass — delegates to the existing sweep_orphans helper."""
+    return sweep_orphans(redis_client, site)
+
+
+def _sweeper_loop(redis_client: redis_mod.Redis, site: str,
+                  sites_path: str | None,
+                  stop_event: threading.Event,
+                  lost_lock_event: threading.Event) -> None:
+    log.info("sweeper_loop_started", site=site)
+    import frappe
+    while not (stop_event.is_set() or lost_lock_event.is_set()):
+        try:
+            frappe.init(site=site, sites_path=sites_path)
+            frappe.connect()
+            try:
+                _sweeper_loop_iter(redis_client, site)
+            finally:
+                frappe.destroy()
+        except Exception as e:
+            log.error("sweeper_loop_iteration_failed", error=str(e))
+        stop_event.wait(SWEEPER_LOOP_INTERVAL_SECONDS)
+    log.info("sweeper_loop_stopped", site=site)
+
+
 def start_all_loops(
     *,
     redis_client: redis_mod.Redis,
@@ -210,7 +241,11 @@ def start_all_loops(
         args=(stop_event, lost_lock_event, site, sites_path),
         daemon=True, name="conductor-scheduler-reaper",
     ))
-    # Task 9 will append sweeper here.
+    threads.append(threading.Thread(
+        target=_sweeper_loop,
+        args=(redis_client, site, sites_path, stop_event, lost_lock_event),
+        daemon=True, name="conductor-scheduler-sweeper",
+    ))
     for t in threads:
         t.start()
     return threads
