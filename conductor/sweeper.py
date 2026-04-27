@@ -18,8 +18,6 @@ sweeper (e.g., monitoring DISPATCH_FAILED rates).
 from __future__ import annotations
 
 import json
-import threading
-import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -32,7 +30,6 @@ from conductor.streams import ensure_consumer_group, stream_key
 
 log = get_logger("conductor.sweeper")
 
-SWEEP_INTERVAL_SECONDS = 30.0
 DEFAULT_THRESHOLD_SECONDS = 30
 SWEEP_BATCH = 100
 
@@ -117,36 +114,3 @@ def sweep_orphans(
             log.error("sweeper_row_failed", job_id=row.get("job_id"), error=str(e))
 
     return recovered
-
-
-class OrphanSweeper:
-    """Worker-side thread that runs sweep_orphans periodically."""
-
-    def __init__(self, redis_client: redis_mod.Redis, site: str, sites_path: str):
-        self._client = redis_client
-        self._site = site
-        self._sites_path = sites_path
-        self._stop = threading.Event()
-        self._thread = threading.Thread(target=self._run, daemon=True, name="conductor-sweeper")
-
-    def start(self) -> None:
-        self._thread.start()
-
-    def stop(self, *, timeout: float = 5.0) -> None:
-        self._stop.set()
-        self._thread.join(timeout=timeout)
-
-    def _run(self) -> None:
-        log.info("sweeper_started", site=self._site)
-        while not self._stop.is_set():
-            try:
-                frappe.init(site=self._site, sites_path=self._sites_path)
-                frappe.connect()
-                try:
-                    sweep_orphans(self._client, self._site)
-                finally:
-                    frappe.destroy()
-            except Exception as e:
-                log.error("sweeper_iteration_failed", error=str(e))
-            self._stop.wait(SWEEP_INTERVAL_SECONDS)
-        log.info("sweeper_stopped", site=self._site)
