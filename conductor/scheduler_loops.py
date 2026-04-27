@@ -23,11 +23,14 @@ except ImportError:  # pragma: no cover — only missing in pure-unit-test env
 from conductor.cron import compute_next_run_at
 from conductor.dispatcher import enqueue as conductor_enqueue
 from conductor.logging import get_logger
+from conductor.scheduled import drain_due_messages
 from conductor.serialization import loads as msgpack_loads
+from conductor.streams import ensure_consumer_group, stream_key
 
 log = get_logger("conductor.scheduler_loops")
 
 CRON_LOOP_INTERVAL_SECONDS = 1.0
+DELAY_LOOP_INTERVAL_SECONDS = 1.0
 
 
 def _decode_kwargs(kwargs_b64: str) -> dict[str, Any]:
@@ -99,6 +102,37 @@ def _cron_loop(stop_event: threading.Event, lost_lock_event: threading.Event,
     log.info("cron_loop_stopped", site=site)
 
 
+# --- delay --------------------------------------------------------------------
+
+
+def _delay_loop_iter(redis_client: redis_mod.Redis, site: str) -> int:
+    """Drain due ZSET messages → XADD their target streams. Returns drained count."""
+    due = drain_due_messages(redis_client, site)
+    drained = 0
+    for encoded in due:
+        queue = encoded.get("queue") or ""
+        if not queue:
+            log.warning("delay_loop_skipped_empty_queue", encoded=encoded)
+            continue
+        target = stream_key(site, queue)
+        ensure_consumer_group(redis_client, target)
+        redis_client.xadd(target, encoded, maxlen=10000, approximate=True)
+        drained += 1
+    return drained
+
+
+def _delay_loop(redis_client: redis_mod.Redis, site: str,
+                stop_event: threading.Event, lost_lock_event: threading.Event) -> None:
+    log.info("delay_loop_started", site=site)
+    while not (stop_event.is_set() or lost_lock_event.is_set()):
+        try:
+            _delay_loop_iter(redis_client, site)
+        except Exception as e:
+            log.error("delay_loop_iteration_failed", error=str(e))
+        stop_event.wait(DELAY_LOOP_INTERVAL_SECONDS)
+    log.info("delay_loop_stopped", site=site)
+
+
 def start_all_loops(
     *,
     redis_client: redis_mod.Redis,
@@ -113,7 +147,12 @@ def start_all_loops(
         args=(stop_event, lost_lock_event, site, sites_path),
         daemon=True, name="conductor-scheduler-cron",
     ))
-    # Tasks 7, 8, 9 will append delay, reaper, sweeper here.
+    threads.append(threading.Thread(
+        target=_delay_loop,
+        args=(redis_client, site, stop_event, lost_lock_event),
+        daemon=True, name="conductor-scheduler-delay",
+    ))
+    # Tasks 8, 9 will append reaper, sweeper here.
     for t in threads:
         t.start()
     return threads
