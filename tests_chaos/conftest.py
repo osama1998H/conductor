@@ -59,6 +59,26 @@ def _frappe_init(site):
     frappe.destroy()
 
 
+@pytest.fixture(autouse=True)
+def _wipe_conductor_state_per_test(site):
+    """Per-test cleanup: wipe Conductor Redis keys + DocType rows BEFORE each
+    chaos test runs. Within a single pytest session, prior tests can leave
+    state behind (stream entries from idempotency tests, scheduled-set retries
+    from kill tests) that confuses the next test's worker."""
+    import frappe
+    from conductor.client import get_redis
+    from conductor.config import load_config
+    cfg = load_config(frappe.local.conf)
+    r = get_redis(cfg.redis_url)
+    for key in r.keys(f"conductor:{site}:*"):
+        r.delete(key)
+    for doctype in ("Conductor DLQ Entry", "Conductor Job Run", "Conductor Job"):
+        for name in frappe.get_all(doctype, pluck="name"):
+            frappe.delete_doc(doctype, name, force=True)
+    frappe.db.commit()
+    yield
+
+
 @pytest.fixture
 def spawn_worker(site):
     """Spawn `bench --site SITE conductor worker --queue default --concurrency 1`
