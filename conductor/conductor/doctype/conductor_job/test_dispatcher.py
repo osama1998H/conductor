@@ -47,3 +47,94 @@ class TestDispatcher(FrappeTestCase):
         self.assertEqual(msg.kwargs, {"k": 42})
         # Cleanup
         frappe.delete_doc("Conductor Job", job_id, force=True)
+
+
+class TestDispatcherIdempotency(FrappeTestCase):
+    def setUp(self):
+        from conductor.client import get_redis
+        from conductor.config import load_config
+        from conductor.idempotency import idem_redis_key
+        cfg = load_config(frappe.local.conf)
+        r = get_redis(cfg.redis_url)
+        r.delete(idem_redis_key(frappe.local.site, "dup-test-key"))
+
+    def test_duplicate_dispatch_with_same_key_returns_same_job_id(self):
+        jid1 = conductor.enqueue(
+            "conductor.demo.echo", queue="default", idempotency_key="dup-test-key", x=1,
+        )
+        jid2 = conductor.enqueue(
+            "conductor.demo.echo", queue="default", idempotency_key="dup-test-key", x=2,
+        )
+        self.assertEqual(jid1, jid2, "second enqueue should return the first job_id")
+        rows = frappe.get_all("Conductor Job", filters={"job_id": jid1})
+        self.assertEqual(len(rows), 1)
+        frappe.delete_doc("Conductor Job", jid1, force=True)
+
+
+class TestDispatcherDecoratorPullThrough(FrappeTestCase):
+    def test_decorator_metadata_stamped_into_message(self):
+        from conductor.client import get_redis
+        from conductor.config import load_config
+        from conductor.streams import stream_key
+        from conductor.messages import decode
+
+        from conductor import job as conductor_job
+        import conductor.demo as demo_mod
+
+        @conductor_job(queue="default", max_attempts=7, backoff="linear", base_delay_seconds=4)
+        def _decorated_echo(**kw):
+            return kw
+        demo_mod._decorated_echo = _decorated_echo
+
+        try:
+            jid = conductor.enqueue("conductor.demo._decorated_echo", k=99)
+
+            cfg = load_config(frappe.local.conf)
+            r = get_redis(cfg.redis_url)
+            skey = stream_key(frappe.local.site, "default")
+            entries = r.xrevrange(skey, count=1)
+            _, fields = entries[0]
+            decoded = {k.decode(): v.decode() for k, v in fields.items()}
+            msg = decode(decoded)
+
+            self.assertEqual(msg.max_attempts, 7)
+            self.assertEqual(msg.backoff, "linear")
+            self.assertEqual(msg.base_delay_seconds, 4)
+            frappe.delete_doc("Conductor Job", jid, force=True)
+        finally:
+            del demo_mod._decorated_echo
+
+
+class TestDispatcherDispatchFailedSingleTxn(FrappeTestCase):
+    def test_xadd_failure_uses_single_db_transaction(self):
+        import redis
+        from unittest.mock import patch
+
+        def _boom(*a, **kw):
+            raise redis.exceptions.ConnectionError("simulated XADD failure")
+
+        with patch("conductor.dispatcher.get_redis") as mock_get:
+            fake_client = type("FakeRedis", (), {})()
+            fake_client.xadd = _boom
+            fake_client.xgroup_create = lambda *a, **kw: None
+            fake_client.set = lambda *a, **kw: True  # idempotency lock acquires fine
+            fake_client.get = lambda *a, **kw: None
+            mock_get.return_value = fake_client
+
+            try:
+                conductor.enqueue("conductor.demo.echo", queue="default", x=1)
+                self.fail("expected ConnectionError")
+            except redis.exceptions.ConnectionError:
+                pass
+
+        rows = frappe.get_all(
+            "Conductor Job",
+            filters={"status": "DISPATCH_FAILED"},
+            fields=["name", "last_error_type", "last_error_message"],
+            order_by="enqueued_at desc",
+            limit=1,
+        )
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].last_error_type, "ConnectionError")
+        self.assertIn("simulated", rows[0].last_error_message)
+        frappe.delete_doc("Conductor Job", rows[0].name, force=True)
