@@ -1,0 +1,74 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "field:job_id",
+ "creation": "2026-04-27 00:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "job_id", "queue", "method", "status", "site",
+  "section_args", "args", "kwargs", "args_preview", "kwargs_preview",
+  "section_lifecycle", "attempt", "max_attempts", "timeout_seconds",
+  "enqueued_at", "scheduled_at", "started_at", "finished_at", "next_run_at", "deadline",
+  "section_meta", "idempotency_key", "trace_id", "span_id",
+  "workflow_run_id", "step_id",
+  "section_result", "last_error_type", "last_error_message", "last_traceback", "result_preview",
+  "section_routing", "worker_id", "redis_msg_id"
+ ],
+ "fields": [
+  {"fieldname": "job_id", "fieldtype": "Data", "label": "Job ID", "reqd": 1, "unique": 1, "in_list_view": 1},
+  {"fieldname": "queue", "fieldtype": "Link", "options": "Conductor Queue", "label": "Queue", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "method", "fieldtype": "Data", "label": "Method", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "status", "fieldtype": "Select", "label": "Status",
+   "options": "QUEUED\nRUNNING\nSUCCEEDED\nFAILED\nTIMED_OUT\nSCHEDULED_RETRY\nDLQ\nCANCELLED\nDISPATCH_FAILED",
+   "default": "QUEUED", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "site", "fieldtype": "Data", "label": "Site"},
+
+  {"fieldname": "section_args", "fieldtype": "Section Break", "label": "Arguments"},
+  {"fieldname": "args", "fieldtype": "Long Text", "label": "Args (msgpack-base64)"},
+  {"fieldname": "kwargs", "fieldtype": "Long Text", "label": "Kwargs (msgpack-base64)"},
+  {"fieldname": "args_preview", "fieldtype": "Code", "label": "Args (preview)", "options": "JSON", "read_only": 1},
+  {"fieldname": "kwargs_preview", "fieldtype": "Code", "label": "Kwargs (preview)", "options": "JSON", "read_only": 1},
+
+  {"fieldname": "section_lifecycle", "fieldtype": "Section Break", "label": "Lifecycle"},
+  {"fieldname": "attempt", "fieldtype": "Int", "label": "Attempt", "default": "1", "in_list_view": 1},
+  {"fieldname": "max_attempts", "fieldtype": "Int", "label": "Max Attempts", "default": "1"},
+  {"fieldname": "timeout_seconds", "fieldtype": "Int", "label": "Timeout (s)", "default": "300"},
+  {"fieldname": "enqueued_at", "fieldtype": "Datetime", "label": "Enqueued At", "in_list_view": 1},
+  {"fieldname": "scheduled_at", "fieldtype": "Datetime", "label": "Scheduled At"},
+  {"fieldname": "started_at", "fieldtype": "Datetime", "label": "Started At"},
+  {"fieldname": "finished_at", "fieldtype": "Datetime", "label": "Finished At"},
+  {"fieldname": "next_run_at", "fieldtype": "Datetime", "label": "Next Run At"},
+  {"fieldname": "deadline", "fieldtype": "Datetime", "label": "Deadline"},
+
+  {"fieldname": "section_meta", "fieldtype": "Section Break", "label": "Metadata"},
+  {"fieldname": "idempotency_key", "fieldtype": "Data", "label": "Idempotency Key"},
+  {"fieldname": "trace_id", "fieldtype": "Data", "label": "Trace ID"},
+  {"fieldname": "span_id", "fieldtype": "Data", "label": "Span ID"},
+  {"fieldname": "workflow_run_id", "fieldtype": "Data", "label": "Workflow Run ID"},
+  {"fieldname": "step_id", "fieldtype": "Data", "label": "Step ID"},
+
+  {"fieldname": "section_result", "fieldtype": "Section Break", "label": "Result / Error"},
+  {"fieldname": "last_error_type", "fieldtype": "Data", "label": "Last Error Type"},
+  {"fieldname": "last_error_message", "fieldtype": "Small Text", "label": "Last Error Message"},
+  {"fieldname": "last_traceback", "fieldtype": "Long Text", "label": "Last Traceback"},
+  {"fieldname": "result_preview", "fieldtype": "Code", "label": "Result Preview", "options": "JSON", "read_only": 1},
+
+  {"fieldname": "section_routing", "fieldtype": "Section Break", "label": "Routing"},
+  {"fieldname": "worker_id", "fieldtype": "Data", "label": "Worker ID"},
+  {"fieldname": "redis_msg_id", "fieldtype": "Data", "label": "Redis Message ID"}
+ ],
+ "links": [],
+ "modified": "2026-04-27 00:00:00",
+ "modified_by": "Administrator",
+ "module": "Conductor",
+ "name": "Conductor Job",
+ "owner": "Administrator",
+ "permissions": [
+  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1, "report": 1, "export": 1},
+  {"role": "Conductor Operator", "read": 1, "report": 1, "export": 1}
+ ],
+ "sort_field": "enqueued_at",
+ "sort_order": "DESC",
+ "track_changes": 0
+}
