@@ -1,0 +1,48 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-04-27 00:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "job", "queue", "moved_at", "attempts", "status",
+  "section_error", "last_error_type", "last_error_message", "last_traceback",
+  "section_payload", "payload", "trace_id",
+  "section_review", "reviewed_by", "reviewed_at", "review_notes"
+ ],
+ "fields": [
+  {"fieldname": "job", "fieldtype": "Link", "options": "Conductor Job", "label": "Job", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "queue", "fieldtype": "Link", "options": "Conductor Queue", "label": "Queue", "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "moved_at", "fieldtype": "Datetime", "label": "Moved To DLQ At", "in_list_view": 1},
+  {"fieldname": "attempts", "fieldtype": "Int", "label": "Attempts"},
+  {"fieldname": "status", "fieldtype": "Select", "label": "Status", "options": "PENDING_REVIEW\nRETRIED\nDISCARDED", "default": "PENDING_REVIEW", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
+
+  {"fieldname": "section_error", "fieldtype": "Section Break", "label": "Last Error"},
+  {"fieldname": "last_error_type", "fieldtype": "Data", "label": "Error Type"},
+  {"fieldname": "last_error_message", "fieldtype": "Small Text", "label": "Error Message"},
+  {"fieldname": "last_traceback", "fieldtype": "Long Text", "label": "Traceback"},
+
+  {"fieldname": "section_payload", "fieldtype": "Section Break", "label": "Payload"},
+  {"fieldname": "payload", "fieldtype": "Long Text", "label": "Payload (JSON)"},
+  {"fieldname": "trace_id", "fieldtype": "Data", "label": "Trace ID"},
+
+  {"fieldname": "section_review", "fieldtype": "Section Break", "label": "Review (Phase 3)"},
+  {"fieldname": "reviewed_by", "fieldtype": "Link", "options": "User", "label": "Reviewed By"},
+  {"fieldname": "reviewed_at", "fieldtype": "Datetime", "label": "Reviewed At"},
+  {"fieldname": "review_notes", "fieldtype": "Small Text", "label": "Review Notes"}
+ ],
+ "links": [],
+ "modified": "2026-04-27 00:00:00",
+ "modified_by": "Administrator",
+ "module": "Conductor",
+ "name": "Conductor DLQ Entry",
+ "owner": "Administrator",
+ "permissions": [
+  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1, "report": 1, "export": 1},
+  {"role": "Conductor Operator", "read": 1, "report": 1, "export": 1}
+ ],
+ "sort_field": "moved_at",
+ "sort_order": "DESC",
+ "track_changes": 0
+}
