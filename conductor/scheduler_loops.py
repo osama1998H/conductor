@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import base64
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import redis as redis_mod
@@ -133,6 +133,59 @@ def _delay_loop(redis_client: redis_mod.Redis, site: str,
     log.info("delay_loop_stopped", site=site)
 
 
+# --- reaper -------------------------------------------------------------------
+
+REAPER_LOOP_INTERVAL_SECONDS = 60.0
+REAPER_STALE_AGE_SECONDS = 30
+REAPER_GONE_AGE_SECONDS = 120
+REAPER_PRUNE_AGE_SECONDS = 7 * 24 * 3600
+
+
+def _reaper_loop_iter(site: str, frappe) -> None:
+    """One reaper pass: mark STALE/GONE based on heartbeat age, prune old rows."""
+    now = datetime.now()
+    gone_cut = now - timedelta(seconds=REAPER_GONE_AGE_SECONDS)
+    stale_cut = now - timedelta(seconds=REAPER_STALE_AGE_SECONDS)
+    prune_cut = now - timedelta(seconds=REAPER_PRUNE_AGE_SECONDS)
+
+    # Order matters: mark GONE first, then STALE (which excludes already-GONE rows).
+    frappe.db.sql(
+        "UPDATE `tabConductor Worker` SET status='GONE' "
+        "WHERE site=%s AND status<>'GONE' AND last_heartbeat < %s",
+        (site, gone_cut),
+    )
+    frappe.db.sql(
+        "UPDATE `tabConductor Worker` SET status='STALE' "
+        "WHERE site=%s AND status='ALIVE' AND last_heartbeat < %s "
+        "AND last_heartbeat >= %s",
+        (site, stale_cut, gone_cut),
+    )
+    frappe.db.sql(
+        "DELETE FROM `tabConductor Worker` "
+        "WHERE site=%s AND last_heartbeat < %s",
+        (site, prune_cut),
+    )
+
+
+def _reaper_loop(stop_event: threading.Event, lost_lock_event: threading.Event,
+                 site: str, sites_path: str | None) -> None:
+    log.info("reaper_loop_started", site=site)
+    import frappe
+    while not (stop_event.is_set() or lost_lock_event.is_set()):
+        try:
+            frappe.init(site=site, sites_path=sites_path)
+            frappe.connect()
+            try:
+                _reaper_loop_iter(site, frappe)
+                frappe.db.commit()
+            finally:
+                frappe.destroy()
+        except Exception as e:
+            log.error("reaper_loop_iteration_failed", error=str(e))
+        stop_event.wait(REAPER_LOOP_INTERVAL_SECONDS)
+    log.info("reaper_loop_stopped", site=site)
+
+
 def start_all_loops(
     *,
     redis_client: redis_mod.Redis,
@@ -152,7 +205,12 @@ def start_all_loops(
         args=(redis_client, site, stop_event, lost_lock_event),
         daemon=True, name="conductor-scheduler-delay",
     ))
-    # Tasks 8, 9 will append reaper, sweeper here.
+    threads.append(threading.Thread(
+        target=_reaper_loop,
+        args=(stop_event, lost_lock_event, site, sites_path),
+        daemon=True, name="conductor-scheduler-reaper",
+    ))
+    # Task 9 will append sweeper here.
     for t in threads:
         t.start()
     return threads
