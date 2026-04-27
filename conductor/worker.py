@@ -233,6 +233,66 @@ def _xautoclaim_pending(redis_client, stream: str, worker_id: str) -> list[tuple
     return []
 
 
+class CancelPoller:
+    """Polls Conductor Job for status=CANCELLED rows belonging to this worker
+    and flips matching cancel_event entries in the shared map (§12.4)."""
+
+    def __init__(
+        self,
+        worker_id: str,
+        site: str,
+        sites_path: str,
+        cancel_events: dict[str, threading.Event],
+        cancel_events_lock: threading.Lock,
+        interval: float = 1.0,
+    ):
+        self._worker_id = worker_id
+        self._site = site
+        self._sites_path = sites_path
+        self._cancel_events = cancel_events
+        self._lock = cancel_events_lock
+        self._interval = interval
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True, name="conductor-cancel-poller")
+
+    def start(self) -> None:
+        self._thread.start()
+
+    def stop(self, *, timeout: float = 5.0) -> None:
+        self._stop.set()
+        self._thread.join(timeout=timeout)
+
+    def _run(self) -> None:
+        log.info("cancel_poller_started", worker_id=self._worker_id)
+        while not self._stop.is_set():
+            try:
+                frappe.init(site=self._site, sites_path=self._sites_path)
+                frappe.connect()
+                try:
+                    rows = frappe.db.sql(
+                        "SELECT job_id FROM `tabConductor Job` WHERE status='CANCELLED' AND worker_id=%s",
+                        (self._worker_id,),
+                        as_dict=True,
+                    )
+                    for row in rows:
+                        with self._lock:
+                            ev = self._cancel_events.get(row["job_id"])
+                        if ev is not None:
+                            ev.set()
+                finally:
+                    frappe.destroy()
+            except Exception as e:
+                log.error("cancel_poller_iteration_failed", error=str(e))
+            self._stop.wait(self._interval)
+        log.info("cancel_poller_stopped", worker_id=self._worker_id)
+
+
+# Process-global cancel_events map populated by _handle_one for the duration of
+# each running job; CancelPoller flips entries when the DB shows CANCELLED.
+_cancel_events: dict[str, threading.Event] = {}
+_cancel_events_lock = threading.Lock()
+
+
 def _handle_one(
     stream_name: str,
     msg_id: bytes,
@@ -258,63 +318,71 @@ def _handle_one(
             return
 
         cancel_event = threading.Event()
-        watchdog = start_watchdog(msg.deadline, cancel_event) if msg.deadline else None
-        started_at = _now()
-
-        succeeded = False
-        result = None
-        exc: BaseException | None = None
-        exc_tb: str | None = None
+        with _cancel_events_lock:
+            _cancel_events[msg.job_id] = cancel_event
         try:
-            with set_context(job_id=msg.job_id, attempt=msg.attempt, deadline=msg.deadline, cancel_event=cancel_event):
-                _set_job_running(msg.job_id, worker_id)
-                func = frappe.get_attr(msg.method)
-                result = func(**msg.kwargs)
-            succeeded = True
-        except BaseException as e:
-            exc = e
-            exc_tb = traceback.format_exc()
+            watchdog = start_watchdog(msg.deadline, cancel_event) if msg.deadline else None
+            started_at = _now()
 
-        finished_at = _now()
-        current_status = frappe.db.get_value("Conductor Job", msg.job_id, "status")
+            succeeded = False
+            result = None
+            exc: BaseException | None = None
+            exc_tb: str | None = None
+            try:
+                with set_context(job_id=msg.job_id, attempt=msg.attempt, deadline=msg.deadline, cancel_event=cancel_event):
+                    _set_job_running(msg.job_id, worker_id)
+                    func = frappe.get_attr(msg.method)
+                    result = func(**msg.kwargs)
+                succeeded = True
+            except BaseException as e:
+                exc = e
+                exc_tb = traceback.format_exc()
 
-        if current_status == "CANCELLED":
-            _write_job_run_row(
-                msg, worker_id,
-                status="SUCCEEDED" if succeeded else "FAILED",
-                exc=exc, tb_str=exc_tb, started_at=started_at, finished_at=finished_at,
-            )
-            log.info("job_cancelled", job_id=msg.job_id, completed_anyway=succeeded)
+            finished_at = _now()
+            current_status = frappe.db.get_value("Conductor Job", msg.job_id, "status")
 
-        elif succeeded:
-            _set_job_succeeded(msg.job_id, result)
-            _write_job_run_row(msg, worker_id, status="SUCCEEDED", started_at=started_at, finished_at=finished_at)
-            log.info("job_succeeded", job_id=msg.job_id)
+            if current_status == "CANCELLED":
+                _write_job_run_row(
+                    msg, worker_id,
+                    status="SUCCEEDED" if succeeded else "FAILED",
+                    exc=exc, tb_str=exc_tb, started_at=started_at, finished_at=finished_at,
+                )
+                log.info("job_cancelled", job_id=msg.job_id, completed_anyway=succeeded)
 
-        else:
-            policy = _resolve_policy_from_msg(msg)
-            if cancel_event.is_set():
-                _write_job_run_row(msg, worker_id, status="TIMED_OUT", exc=exc, tb_str=exc_tb, started_at=started_at, finished_at=finished_at)
-                if policy.should_retry(exc, msg.attempt):
+            elif succeeded:
+                _set_job_succeeded(msg.job_id, result)
+                _write_job_run_row(msg, worker_id, status="SUCCEEDED", started_at=started_at, finished_at=finished_at)
+                log.info("job_succeeded", job_id=msg.job_id)
+
+            else:
+                policy = _resolve_policy_from_msg(msg)
+                if cancel_event.is_set():
+                    _write_job_run_row(msg, worker_id, status="TIMED_OUT", exc=exc, tb_str=exc_tb, started_at=started_at, finished_at=finished_at)
+                    if policy.should_retry(exc, msg.attempt):
+                        delay = policy.compute_next_delay(msg.attempt)
+                        _schedule_retry(msg, delay, redis_client, site)
+                    else:
+                        _move_to_dlq(msg, exc, redis_client, site, tb_str=exc_tb)
+                        frappe.db.set_value("Conductor Job", msg.job_id, "status", "TIMED_OUT", update_modified=False)
+                        frappe.db.commit()
+                elif policy.should_retry(exc, msg.attempt):
                     delay = policy.compute_next_delay(msg.attempt)
                     _schedule_retry(msg, delay, redis_client, site)
+                    _write_job_run_row(msg, worker_id, status="FAILED", exc=exc, tb_str=exc_tb, started_at=started_at, finished_at=finished_at)
                 else:
                     _move_to_dlq(msg, exc, redis_client, site, tb_str=exc_tb)
-                    frappe.db.set_value("Conductor Job", msg.job_id, "status", "TIMED_OUT", update_modified=False)
-                    frappe.db.commit()
-            elif policy.should_retry(exc, msg.attempt):
-                delay = policy.compute_next_delay(msg.attempt)
-                _schedule_retry(msg, delay, redis_client, site)
-                _write_job_run_row(msg, worker_id, status="FAILED", exc=exc, tb_str=exc_tb, started_at=started_at, finished_at=finished_at)
-            else:
-                _move_to_dlq(msg, exc, redis_client, site, tb_str=exc_tb)
-                _write_job_run_row(msg, worker_id, status="FAILED", exc=exc, tb_str=exc_tb, started_at=started_at, finished_at=finished_at)
-            log.error("job_failed", job_id=msg.job_id, attempt=msg.attempt)
+                    _write_job_run_row(msg, worker_id, status="FAILED", exc=exc, tb_str=exc_tb, started_at=started_at, finished_at=finished_at)
+                log.error("job_failed", job_id=msg.job_id, attempt=msg.attempt)
 
-        if watchdog:
-            watchdog.cancel()
-        release_exec_lock(redis_client, site, msg.job_id, worker_id)
-        redis_client.xack(stream_name, CONSUMER_GROUP, msg_id)
+            if watchdog:
+                watchdog.cancel()
+            with _cancel_events_lock:
+                _cancel_events.pop(msg.job_id, None)
+            release_exec_lock(redis_client, site, msg.job_id, worker_id)
+            redis_client.xack(stream_name, CONSUMER_GROUP, msg_id)
+        finally:
+            with _cancel_events_lock:
+                _cancel_events.pop(msg.job_id, None)
     finally:
         frappe.destroy()
 
@@ -413,8 +481,10 @@ def run_worker(*, queues: list[str], concurrency: int, site: str, grace_seconds:
     pool = ThreadPoolExecutor(max_workers=concurrency, thread_name_prefix="conductor-")
     drainer = DelayDrainer(r, site)
     sweeper = OrphanSweeper(r, site, sites_path)
+    cancel_poller = CancelPoller(worker_id, site, sites_path, _cancel_events, _cancel_events_lock)
     drainer.start()
     sweeper.start()
+    cancel_poller.start()
 
     last_beat = 0.0
     try:
@@ -437,6 +507,7 @@ def run_worker(*, queues: list[str], concurrency: int, site: str, grace_seconds:
         log_ctx.info("worker_shutting_down", grace_seconds=grace_seconds)
         drainer.stop()
         sweeper.stop()
+        cancel_poller.stop()
         pool.shutdown(wait=True)
         _mark_worker_gone(worker_id)
         log_ctx.info("worker_stopped")
