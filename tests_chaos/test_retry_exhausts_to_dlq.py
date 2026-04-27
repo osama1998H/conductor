@@ -40,6 +40,11 @@ def test_retry_exhausts_to_dlq_under_chaos(spawn_worker):
         final = wait_for_status(job_id, "DLQ", timeout=180)
         assert final == "DLQ", f"expected DLQ, got {final}"
 
+        # Refresh DB snapshot before querying child rows (subprocess workers
+        # commit Job Run / DLQ Entry in separate txns; our connection may
+        # still see a stale snapshot otherwise).
+        frappe.db.rollback()
+
         # Three Job Run rows (some may be TIMED_OUT from the reclaim race;
         # at least one will be FAILED from boom; total count == max_attempts).
         runs = frappe.get_all(
