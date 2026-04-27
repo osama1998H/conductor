@@ -35,6 +35,7 @@ from conductor.messages import JobMessage, decode, encode
 from conductor.otel import setup_otel
 from conductor.retry import RetryPolicy
 from conductor.scheduled import DelayDrainer, schedule_message
+from conductor.sweeper import OrphanSweeper
 from conductor.streams import CONSUMER_GROUP, dlq_key, ensure_consumer_group, stream_key
 
 log = get_logger("conductor.worker")
@@ -411,7 +412,9 @@ def run_worker(*, queues: list[str], concurrency: int, site: str, grace_seconds:
 
     pool = ThreadPoolExecutor(max_workers=concurrency, thread_name_prefix="conductor-")
     drainer = DelayDrainer(r, site)
+    sweeper = OrphanSweeper(r, site, sites_path)
     drainer.start()
+    sweeper.start()
 
     last_beat = 0.0
     try:
@@ -433,6 +436,7 @@ def run_worker(*, queues: list[str], concurrency: int, site: str, grace_seconds:
     finally:
         log_ctx.info("worker_shutting_down", grace_seconds=grace_seconds)
         drainer.stop()
+        sweeper.stop()
         pool.shutdown(wait=True)
         _mark_worker_gone(worker_id)
         log_ctx.info("worker_stopped")
