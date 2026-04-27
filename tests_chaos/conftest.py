@@ -27,12 +27,34 @@ def site():
 
 @pytest.fixture(scope="session", autouse=True)
 def _frappe_init(site):
-    """One-time per-session Frappe init for the test process itself."""
+    """One-time per-session Frappe init for the test process itself.
+
+    Also wipes any leftover Conductor state from prior chaos runs so each
+    suite starts on a clean slate (scheduled-set retries, DLQ stream entries,
+    and idempotency locks all accumulate otherwise and cross-pollinate tests).
+    """
     import os
     os.chdir(str(BENCH_ROOT))
     import frappe
     frappe.init(site=site, sites_path=str(BENCH_ROOT / "sites"))
     frappe.connect()
+
+    # Wipe per-site Conductor Redis keys (queue streams, scheduled set, DLQ
+    # streams, idempotency locks). Default queues will be recreated lazily
+    # by ensure_consumer_group on first dispatch.
+    from conductor.client import get_redis
+    from conductor.config import load_config
+    cfg = load_config(frappe.local.conf)
+    r = get_redis(cfg.redis_url)
+    for key in r.keys(f"conductor:{site}:*"):
+        r.delete(key)
+
+    # Wipe leftover Conductor Job / Job Run / DLQ Entry rows from prior runs.
+    for doctype in ("Conductor DLQ Entry", "Conductor Job Run", "Conductor Job"):
+        for name in frappe.get_all(doctype, pluck="name"):
+            frappe.delete_doc(doctype, name, force=True)
+    frappe.db.commit()
+
     yield
     frappe.destroy()
 
