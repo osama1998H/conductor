@@ -45,15 +45,20 @@ These were not in the plan; integration testing surfaced them:
 
 **What we know:** The flake is **test-state pollution**, not a worker-correctness bug:
 - Conductor Redis state (stream entries, scheduled-set retries, DLQ stream entries, idempotency locks) accumulates across tests in the same session.
-- The session-scoped wipe added in conftest only runs once per pytest invocation; tests within the same session still pollute each other.
-- A per-test autouse cleanup fixture would address this and was queued but not applied (user accepted current state for Phase 1).
+- Two cleanup fixtures already shipped in `tests_chaos/conftest.py`:
+  - **Session-scoped** (`_frappe_init`, autouse) wipes Conductor Redis keys + DocType rows once at session start.
+  - **Per-test** (`_wipe_conductor_state_per_test`, autouse) does the same wipe before each test.
+- Despite both, an occasional ~1-in-5 flake remained when running back-to-back 5-run gates. Hypothesis: residual subprocess workers from the previous gate still draining as the next gate's tests start (process group cleanup is best-effort with `proc.wait(timeout=5)`).
 
 **Why we accepted:**
-- All three chaos tests pass on a clean Redis + DB.
+- All three chaos tests pass on a clean Redis + DB and pass individually.
 - The worker-side invariants (kill-9 → reclaim, retry → DLQ, dispatch idempotency) are demonstrably correct — every passing run validates them.
 - The flake is in test infrastructure, not in production code.
 
-**Phase 2 task #1 should be:** add a per-test autouse fixture in `tests_chaos/conftest.py` that wipes `conductor:{site}:*` Redis keys and the three Conductor DocType row tables before each chaos test runs. Then re-run the 5-consecutive flake gate to confirm green.
+**Phase 2 task #1 should be:** track down the last residual flake. Likely culprits to investigate:
+1. Subprocess worker shutdown takes longer than the 5s `proc.wait` grace; a peer `OrphanSweeper`/`CancelPoller` thread inside the dying worker keeps writing rows after the test wipe ran.
+2. The XAUTOCLAIM consumer group's PEL retains stale message-IDs across tests even when the underlying stream entries are XDEL'd. Calling `XGROUP DESTROY` + lazy recreate per test would scrub it.
+3. Test-process Redis client is reused across tests via `get_redis`'s pool; under high concurrency a stale read/write may interleave with worker-subprocess writes.
 
 ## 4. Other Phase 1 limitations called out in spec §16
 
