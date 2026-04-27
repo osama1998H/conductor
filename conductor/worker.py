@@ -152,15 +152,38 @@ def _handle_one(stream_name: str, msg_id: bytes, fields: dict, worker_id: str, r
         frappe.destroy()
 
 
-def _read_and_dispatch(redis_client, streams: dict, count: int, block_ms: int, worker_id: str, pool: ThreadPoolExecutor, site: str, sites_path: str):
+def _read_and_dispatch(
+    redis_client,
+    streams: dict,
+    count: int,
+    block_ms: int,
+    worker_id: str,
+    pool: ThreadPoolExecutor,
+    site: str,
+    sites_path: str,
+    *,
+    wait: bool,
+):
+    """Read up to `count` messages and submit each to the pool.
+
+    `wait=True`: block until every submitted future completes (used by tests so
+    pytest sees per-job exceptions).
+    `wait=False`: fire-and-forget — `_handle_one` already catches and logs every
+    exception internally, so production callers don't need to join. Letting the
+    while-loop iterate immediately preserves heartbeat cadence and lets the next
+    XREADGROUP keep the threadpool saturated. DO NOT add `f.result()` back here
+    "to surface errors" — that would serialize the production worker on the
+    slowest job in each batch and drop effective concurrency to the batch size.
+    """
     msgs = redis_client.xreadgroup(CONSUMER_GROUP, worker_id, streams, count=count, block=block_ms)
     futures = []
     for stream_name, entries in (msgs or []):
         sname = stream_name.decode() if isinstance(stream_name, bytes) else stream_name
         for msg_id, fields in entries:
             futures.append(pool.submit(_handle_one, sname, msg_id, fields, worker_id, redis_client, site, sites_path))
-    for f in futures:
-        f.result()  # surface exceptions inside tests
+    if wait:
+        for f in futures:
+            f.result()
 
 
 def run_worker_once(*, queues: list[str], concurrency: int, site: str, block_ms: int = 5000) -> None:
@@ -182,7 +205,7 @@ def run_worker_once(*, queues: list[str], concurrency: int, site: str, block_ms:
         streams[skey] = ">"
     pool = ThreadPoolExecutor(max_workers=concurrency, thread_name_prefix="conductor-once-")
     try:
-        _read_and_dispatch(r, streams, concurrency, block_ms, worker_id, pool, site, sites_path)
+        _read_and_dispatch(r, streams, concurrency, block_ms, worker_id, pool, site, sites_path, wait=True)
     finally:
         pool.shutdown(wait=True)
         _mark_worker_gone(worker_id)
@@ -231,7 +254,7 @@ def run_worker(*, queues: list[str], concurrency: int, site: str, grace_seconds:
                 _heartbeat(worker_id)
                 last_beat = now
             try:
-                _read_and_dispatch(r, streams, concurrency, 5000, worker_id, pool, site, sites_path)
+                _read_and_dispatch(r, streams, concurrency, 5000, worker_id, pool, site, sites_path, wait=False)
             except Exception as e:
                 log_ctx.error("worker_iteration_failed", error=str(e))
                 time.sleep(1)

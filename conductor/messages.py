@@ -7,7 +7,7 @@ ASCII-safe strings). args/kwargs are msgpack-then-base64 encoded.
 from __future__ import annotations
 
 import base64
-from dataclasses import dataclass, field, fields, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any
 

@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 
 def echo(**kwargs: Any) -> dict:
     """Return a dict echoing what was sent in, plus a server timestamp."""
-    return {"echo": kwargs, "now": datetime.utcnow().isoformat()}
+    return {"echo": kwargs, "now": datetime.now(timezone.utc).isoformat()}
 
 
 def boom(**kwargs: Any) -> None:
