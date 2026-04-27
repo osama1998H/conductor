@@ -84,3 +84,23 @@ def test_renew_extends_ttl_for_owner(r):
     time.sleep(1.5)
     # Original 2s would have expired; renewal extended to 10s, so still alive.
     assert r.get("conductor:site1:scheduler:lock") == b"instance-A"
+
+
+def test_renew_lua_returns_integer_1_on_success(r):
+    """Pin the Lua return-type contract — bool() collapses int/str/bytes alike,
+    so this raw-eval test is the only thing that catches a regression where
+    the script accidentally returns a non-integer."""
+    acquire(r, "site1", "instance-A", ttl=15)
+    key = lock_redis_key("site1")
+    from conductor.scheduler_lock import _RENEW_LUA
+    result = r.eval(_RENEW_LUA, 1, key, "instance-A", 15000)
+    assert result == 1  # integer, not truthy str/bytes/table
+
+
+def test_release_lua_returns_integer_1_on_success(r):
+    """Pin the Lua return-type contract for the release script."""
+    acquire(r, "site1", "instance-A", ttl=15)
+    key = lock_redis_key("site1")
+    from conductor.scheduler_lock import _RELEASE_LUA
+    result = r.eval(_RELEASE_LUA, 1, key, "instance-A")
+    assert result == 1

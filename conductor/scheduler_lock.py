@@ -1,6 +1,15 @@
 """Singleton scheduler lock: SET NX EX + Lua check-and-PEXPIRE / check-and-DEL.
 
 All three operations are single-key (master §3 #15 cluster-compat).
+
+Usage: the per-site scheduler daemon calls acquire() on startup and renew()
+on every heartbeat tick (default ttl=15s, renew interval should be < ttl/2).
+If renew() returns False the caller lost the lock (TTL expired or stolen) and
+must exit so the supervisor can restart and re-compete. release() on clean
+shutdown prevents the 15s expiry wait before a peer can take over.
+
+instance_id is treated as an opaque byte-equality token; any UTF-8 str is safe
+(redis-py encodes to bytes; ARGV comparison is binary-safe).
 """
 
 from __future__ import annotations
