@@ -85,6 +85,8 @@ app_license = "mit"
 # before_install = "conductor.install.before_install"
 after_install = "conductor.install.after_install"
 
+commands = ["conductor.commands.conductor_group"]
+
 # Uninstallation
 # ------------
 
