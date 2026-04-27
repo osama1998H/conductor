@@ -6,10 +6,21 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 
 import conductor
+from conductor.client import get_redis
+from conductor.config import load_config
+from conductor.streams import stream_key
 from conductor.worker import run_worker_once
 
 
 class TestWorkerE2E(FrappeTestCase):
+    def setUp(self):
+        # Other tests in this run (e.g., test_dispatcher) leave XADDed stream entries
+        # behind when they only delete the Conductor Job row. Clear the stream so the
+        # worker pass below drains exactly the message this test enqueues.
+        cfg = load_config(frappe.local.conf)
+        r = get_redis(cfg.redis_url)
+        r.delete(stream_key(frappe.local.site, "default"))
+
     def _wait_for_status(self, job_id: str, status: str, timeout: float = 5.0):
         end = time.time() + timeout
         while time.time() < end:
