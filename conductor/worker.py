@@ -6,7 +6,9 @@ Phase 1 additions:
 - On exhausted retries: XADD to DLQ stream + Conductor DLQ Entry row, status=DLQ.
 - Per-attempt Conductor Job Run row at terminal of each attempt.
 - XAUTOCLAIM stalled-message reclamation per iteration (idle ≥ 60s).
-- Spawn DelayDrainer thread (Phase 2 lifts to scheduler process).
+
+Phase 2: DelayDrainer and OrphanSweeper are now owned by the scheduler process.
+The worker owns only CancelPoller + the XAUTOCLAIM loop + heartbeat.
 """
 
 from __future__ import annotations
@@ -34,8 +36,7 @@ from conductor.logging import get_logger, setup_logging
 from conductor.messages import JobMessage, decode, encode
 from conductor.otel import setup_otel
 from conductor.retry import RetryPolicy
-from conductor.scheduled import DelayDrainer, schedule_message
-from conductor.sweeper import OrphanSweeper
+from conductor.scheduled import schedule_message
 from conductor.streams import CONSUMER_GROUP, dlq_key, ensure_consumer_group, stream_key
 
 log = get_logger("conductor.worker")
@@ -87,7 +88,17 @@ def _register_worker(worker_id: str, queues: list[str], site: str) -> None:
 
 
 def _heartbeat(worker_id: str) -> None:
-    frappe.db.set_value("Conductor Worker", worker_id, "last_heartbeat", _now_naive(), update_modified=False)
+    """Heartbeat both writes last_heartbeat AND resets status to ALIVE.
+
+    Without the status reset, a worker that the reaper marked STALE during a
+    long GC pause would stay STALE forever in Desk even after it resumed.
+    """
+    frappe.db.set_value(
+        "Conductor Worker",
+        worker_id,
+        {"last_heartbeat": _now_naive(), "status": "ALIVE"},
+        update_modified=False,
+    )
     frappe.db.commit()
 
 
@@ -483,11 +494,7 @@ def run_worker(*, queues: list[str], concurrency: int, site: str, grace_seconds:
         streams[skey] = ">"
 
     pool = ThreadPoolExecutor(max_workers=concurrency, thread_name_prefix="conductor-")
-    drainer = DelayDrainer(r, site)
-    sweeper = OrphanSweeper(r, site, sites_path)
     cancel_poller = CancelPoller(worker_id, site, sites_path, _cancel_events, _cancel_events_lock)
-    drainer.start()
-    sweeper.start()
     cancel_poller.start()
 
     last_beat = 0.0
@@ -509,8 +516,6 @@ def run_worker(*, queues: list[str], concurrency: int, site: str, grace_seconds:
                 time.sleep(1)
     finally:
         log_ctx.info("worker_shutting_down", grace_seconds=grace_seconds)
-        drainer.stop()
-        sweeper.stop()
         cancel_poller.stop()
         pool.shutdown(wait=True)
         _mark_worker_gone(worker_id)
