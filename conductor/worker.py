@@ -43,6 +43,9 @@ log = get_logger("conductor.worker")
 _HEARTBEAT_SECS = 5
 _PREVIEW_MAX = 4096
 _AUTOCLAIM_IDLE_MS = int(os.environ.get("CONDUCTOR_TEST_AUTOCLAIM_IDLE_MS", "60000"))
+# In tests, override the exec-lock TTL so that a killed worker's lock expires
+# quickly and a reclaiming peer can proceed. Production default: timeout + 30s.
+_EXEC_LOCK_TTL_OVERRIDE = int(os.environ.get("CONDUCTOR_TEST_EXEC_LOCK_TTL_SECONDS", "0"))
 _RECLAIM_BATCH = 32
 
 
@@ -312,7 +315,8 @@ def _handle_one(
             redis_client.xack(stream_name, CONSUMER_GROUP, msg_id)
             return
 
-        if not acquire_exec_lock(redis_client, site, msg.job_id, worker_id, ttl=msg.timeout_seconds + 30):
+        lock_ttl = _EXEC_LOCK_TTL_OVERRIDE if _EXEC_LOCK_TTL_OVERRIDE > 0 else msg.timeout_seconds + 30
+        if not acquire_exec_lock(redis_client, site, msg.job_id, worker_id, ttl=lock_ttl):
             log.info("exec_lock_held_by_peer", job_id=msg.job_id)
             redis_client.xack(stream_name, CONSUMER_GROUP, msg_id)
             return

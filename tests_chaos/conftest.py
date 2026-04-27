@@ -51,7 +51,12 @@ def spawn_worker(site):
             "--queue", queue, "--concurrency", str(concurrency),
         ]
         env = os.environ.copy()
-        env.setdefault("CONDUCTOR_TEST_AUTOCLAIM_IDLE_MS", "1500")
+        # Exec lock expires in 5s (must be < AUTOCLAIM_IDLE_MS/1000) so the
+        # peer that reclaims after the lock expires can actually acquire it.
+        env.setdefault("CONDUCTOR_TEST_EXEC_LOCK_TTL_SECONDS", "5")
+        # Reclaim idle threshold: must exceed EXEC_LOCK_TTL_SECONDS*1000 so
+        # that by the time XAUTOCLAIM fires, the dead worker's lock is gone.
+        env.setdefault("CONDUCTOR_TEST_AUTOCLAIM_IDLE_MS", "8000")
         proc = subprocess.Popen(
             cmd,
             cwd=str(BENCH_ROOT),
@@ -71,16 +76,16 @@ def spawn_worker(site):
             except Exception:
                 try:
                     os.killpg(proc.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
+                except (ProcessLookupError, PermissionError):
+                    pass  # already dead or in a different session
 
     yield _spawn
 
     for p in procs:
         try:
             os.killpg(p.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
+        except (ProcessLookupError, PermissionError):
+            pass  # already dead or in a different session
 
 
 def wait_for_status(job_id: str, expected: str, *, timeout: float = 30.0) -> str:
