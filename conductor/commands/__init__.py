@@ -2,6 +2,7 @@
 
 import click
 
+from conductor.commands.doctor import doctor_command
 from conductor.commands.worker import worker_command
 
 
@@ -11,6 +12,7 @@ def conductor_group():
 
 
 conductor_group.add_command(worker_command)
+conductor_group.add_command(doctor_command)
 
 
 commands = [conductor_group]
