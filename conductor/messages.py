@@ -12,13 +12,47 @@ from __future__ import annotations
 
 import base64
 import json
+import time
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any
 
+import frappe
+
 from conductor.serialization import dumps, loads
 
 SCHEMA_VERSION = 1
+
+# Realtime payload field allowlist — matches spec §8.3. last_traceback is
+# deliberately excluded (can be tens of KB; the detail pane re-fetches
+# get_job() on terminal-state transitions to load it).
+_REALTIME_FIELDS = frozenset({
+    "attempt",
+    "max_attempts",
+    "queue",
+    "method",
+    "last_error_type",
+    "last_error_message",
+    "finished_at",
+    "next_run_at",
+})
+
+
+def emit_job_event(job_id: str, status: str, **fields) -> None:
+    payload = {"job_id": job_id, "status": status, "ts": int(time.time())}
+    for k, v in fields.items():
+        if k in _REALTIME_FIELDS and v is not None:
+            payload[k] = v
+    # doctype/docname scope delivery to the per-doc Socket.IO room
+    # (doc:Conductor Job/{job_id}); event= is only a label. See spec §8.6.1.
+    frappe.publish_realtime(
+        event=f"conductor:job:{job_id}",
+        message=payload,
+        doctype="Conductor Job",
+        docname=job_id,
+        after_commit=True,
+    )
+
 
 # Required only for the original Phase 0 set; Phase 1 fields are optional.
 _REQUIRED_FIELDS = {
