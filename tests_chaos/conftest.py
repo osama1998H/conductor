@@ -1,8 +1,16 @@
-"""Chaos-test fixtures: spawn `bench conductor worker` as a subprocess so we
-can kill -9 it mid-job and verify reclaim semantics.
+"""Chaos-test fixtures: spawn `bench conductor worker` and `bench conductor
+scheduler` as subprocesses so we can kill -9 them mid-job and verify reclaim
++ retry semantics.
 
-Chaos tests need a real Frappe site connection inside the test process to
-inspect rows, so each test does its own frappe.init/connect/destroy.
+Phase 2 changes:
+  - autouse `spawn_scheduler` fixture: every chaos test gets a scheduler
+    process running by default (because Phase 2 worker no longer drains the
+    scheduled set).
+  - per-test teardown: `XGROUP DESTROY` every consumer group on every conductor
+    stream key before deletion — scrubs PEL stale message-IDs that survived
+    `r.delete(key)` (master Phase 2 hand-off §3 #2 hypothesis).
+  - tighter subprocess teardown: poll until the process group is empty before
+    moving on (master Phase 2 hand-off §3 #1).
 """
 
 from __future__ import annotations
@@ -18,6 +26,7 @@ import pytest
 
 BENCH_ROOT = Path("/Users/osamamuhammed/frappe_15")
 DEFAULT_SITE = "frappe.localhost"
+SUBPROCESS_TEARDOWN_GRACE_SECONDS = 10
 
 
 @pytest.fixture(scope="session")
@@ -25,65 +34,101 @@ def site():
     return DEFAULT_SITE
 
 
-@pytest.fixture(scope="session", autouse=True)
-def _frappe_init(site):
-    """One-time per-session Frappe init for the test process itself.
-
-    Also wipes any leftover Conductor state from prior chaos runs so each
-    suite starts on a clean slate (scheduled-set retries, DLQ stream entries,
-    and idempotency locks all accumulate otherwise and cross-pollinate tests).
-    """
-    import os
-    os.chdir(str(BENCH_ROOT))
+def _wipe_conductor_state(site_name: str) -> None:
+    """XGROUP DESTROY all conductor consumer groups, then delete all
+    conductor:{site}:* keys, then delete all DocType rows."""
     import frappe
-    frappe.init(site=site, sites_path=str(BENCH_ROOT / "sites"))
-    frappe.connect()
-
-    # Wipe per-site Conductor Redis keys (queue streams, scheduled set, DLQ
-    # streams, idempotency locks). Default queues will be recreated lazily
-    # by ensure_consumer_group on first dispatch.
     from conductor.client import get_redis
     from conductor.config import load_config
     cfg = load_config(frappe.local.conf)
     r = get_redis(cfg.redis_url)
-    for key in r.keys(f"conductor:{site}:*"):
+
+    # First: XGROUP DESTROY on every stream key (queues + DLQ). This scrubs
+    # the PEL of stale message-IDs even when the stream itself is recreated.
+    stream_keys = list(r.keys(f"conductor:{site_name}:stream:*"))
+    dlq_keys = list(r.keys(f"conductor:{site_name}:dlq:*"))
+    for skey in stream_keys + dlq_keys:
+        try:
+            for g in (r.xinfo_groups(skey) or []):
+                gname = g["name"]
+                try:
+                    r.xgroup_destroy(skey, gname)
+                except Exception:
+                    pass
+        except Exception:
+            # NOGROUP / stream missing — fine.
+            pass
+
+    # Then: delete every conductor key for this site.
+    for key in r.keys(f"conductor:{site_name}:*"):
         r.delete(key)
 
-    # Wipe leftover Conductor Job / Job Run / DLQ Entry rows from prior runs.
+    # Then: delete DocType rows in dependency order (DLQ Entry → Job Run → Job).
     for doctype in ("Conductor DLQ Entry", "Conductor Job Run", "Conductor Job"):
-        for name in frappe.get_all(doctype, pluck="name"):
-            frappe.delete_doc(doctype, name, force=True)
+        for n in frappe.get_all(doctype, pluck="name"):
+            frappe.delete_doc(doctype, n, force=True)
     frappe.db.commit()
 
+
+@pytest.fixture(scope="session", autouse=True)
+def _frappe_init(site):
+    """One-time Frappe init for the test process. Wipes any leftover Conductor
+    state from prior chaos runs."""
+    os.chdir(str(BENCH_ROOT))
+    import frappe
+    frappe.init(site=site, sites_path=str(BENCH_ROOT / "sites"))
+    frappe.connect()
+    _wipe_conductor_state(site)
     yield
     frappe.destroy()
 
 
 @pytest.fixture(autouse=True)
 def _wipe_conductor_state_per_test(site):
-    """Per-test cleanup: wipe Conductor Redis keys + DocType rows BEFORE each
-    chaos test runs. Within a single pytest session, prior tests can leave
-    state behind (stream entries from idempotency tests, scheduled-set retries
-    from kill tests) that confuses the next test's worker."""
-    import frappe
-    from conductor.client import get_redis
-    from conductor.config import load_config
-    cfg = load_config(frappe.local.conf)
-    r = get_redis(cfg.redis_url)
-    for key in r.keys(f"conductor:{site}:*"):
-        r.delete(key)
-    for doctype in ("Conductor DLQ Entry", "Conductor Job Run", "Conductor Job"):
-        for name in frappe.get_all(doctype, pluck="name"):
-            frappe.delete_doc(doctype, name, force=True)
-    frappe.db.commit()
+    """Per-test: wipe Conductor Redis keys + DocType rows BEFORE each test.
+
+    Includes XGROUP DESTROY to scrub PEL state — addresses the residual flake
+    hypothesis from master Phase 2 hand-off §3 #2."""
+    _wipe_conductor_state(site)
     yield
+    # Post-test: same wipe, so no state leaks to the next test even if a
+    # subprocess wrote something during teardown.
+    _wipe_conductor_state(site)
+
+
+def _terminate_pgroup(proc: subprocess.Popen, timeout: float = 5.0) -> None:
+    """Send SIGTERM to the process group; wait until pgroup is empty (or
+    SUBPROCESS_TEARDOWN_GRACE_SECONDS, then SIGKILL)."""
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+    except (ProcessLookupError, PermissionError):
+        return  # already dead
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            os.killpg(proc.pid, 0)  # raises if no process in group
+        except (ProcessLookupError, PermissionError):
+            return  # cleanly drained
+        time.sleep(0.1)
+    # Grace exhausted — escalate.
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        pass
+    # Final wait so the OS reaps the zombie.
+    deadline = time.time() + SUBPROCESS_TEARDOWN_GRACE_SECONDS
+    while time.time() < deadline:
+        try:
+            os.killpg(proc.pid, 0)
+        except (ProcessLookupError, PermissionError):
+            return
+        time.sleep(0.1)
 
 
 @pytest.fixture
 def spawn_worker(site):
-    """Spawn `bench --site SITE conductor worker --queue default --concurrency 1`
-    as a subprocess. Returns a callable that yields the subprocess.Popen
-    handle; the test is responsible for kill/wait."""
+    """Spawn `bench --site SITE conductor worker` as a subprocess. Tightened
+    teardown polls until the process group is empty (Phase 2 fix)."""
     procs: list[subprocess.Popen] = []
 
     @contextmanager
@@ -93,46 +138,55 @@ def spawn_worker(site):
             "--queue", queue, "--concurrency", str(concurrency),
         ]
         env = os.environ.copy()
-        # Exec lock expires in 5s (must be < AUTOCLAIM_IDLE_MS/1000) so the
-        # peer that reclaims after the lock expires can actually acquire it.
         env.setdefault("CONDUCTOR_TEST_EXEC_LOCK_TTL_SECONDS", "5")
-        # Reclaim idle threshold: must exceed EXEC_LOCK_TTL_SECONDS*1000 so
-        # that by the time XAUTOCLAIM fires, the dead worker's lock is gone.
         env.setdefault("CONDUCTOR_TEST_AUTOCLAIM_IDLE_MS", "8000")
         proc = subprocess.Popen(
-            cmd,
-            cwd=str(BENCH_ROOT),
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.STDOUT,
-            preexec_fn=os.setsid,
-            env=env,
+            cmd, cwd=str(BENCH_ROOT),
+            stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT,
+            preexec_fn=os.setsid, env=env,
         )
         procs.append(proc)
         time.sleep(2.0)
         try:
             yield proc
         finally:
-            try:
-                os.killpg(proc.pid, signal.SIGTERM)
-                proc.wait(timeout=5)
-            except Exception:
-                try:
-                    os.killpg(proc.pid, signal.SIGKILL)
-                except (ProcessLookupError, PermissionError):
-                    pass  # already dead or in a different session
+            _terminate_pgroup(proc)
 
     yield _spawn
 
     for p in procs:
-        try:
-            os.killpg(p.pid, signal.SIGKILL)
-        except (ProcessLookupError, PermissionError):
-            pass  # already dead or in a different session
+        _terminate_pgroup(p, timeout=0)  # immediate kill on session teardown
+
+
+@pytest.fixture(autouse=True)
+def spawn_scheduler(site):
+    """AUTO-spawn a scheduler subprocess for every chaos test.
+
+    Phase 1 chaos tests rely on the worker's DelayDrainer to fire retries.
+    Phase 2 lifts that to the scheduler — every chaos test now needs the
+    scheduler running by default. Tests that want to exercise scheduler
+    death (test_scheduler_handoff) override this fixture with their own
+    spawn pattern."""
+    cmd = [
+        "bench", "--site", site, "conductor", "scheduler",
+        "--lock-ttl-seconds=3",
+        "--renew-interval-seconds=1",
+        "--poll-interval-seconds=1",
+    ]
+    proc = subprocess.Popen(
+        cmd, cwd=str(BENCH_ROOT),
+        stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT,
+        preexec_fn=os.setsid,
+    )
+    time.sleep(2.0)
+    try:
+        yield proc
+    finally:
+        _terminate_pgroup(proc)
 
 
 def wait_for_status(job_id: str, expected: str, *, timeout: float = 30.0) -> str:
-    """Poll the DB until the job reaches `expected` or timeout. Returns the
-    last-observed status (whether or not it matched)."""
+    """Poll the DB until job reaches `expected` or timeout."""
     import frappe
     end = time.time() + timeout
     last = None
