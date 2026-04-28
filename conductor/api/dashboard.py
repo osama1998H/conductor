@@ -44,6 +44,19 @@ def _require_destructive() -> None:
         raise frappe.PermissionError("System Manager only")
 
 
+@frappe.whitelist()
+def get_user_roles() -> dict[str, Any]:
+    """User identity + roles for the logged-in user. The dashboard SPA uses
+    this to gate destructive UI buttons. The www/ route doesn't expose
+    Frappe's bootinfo, so the SPA can't read window.frappe.boot directly.
+
+    Returned shape: {"user": "<email-or-Administrator>", "roles": [...]}.
+    The literal "Administrator" user is treated as full-access by the SPA.
+    """
+    _require_read()
+    return {"user": frappe.session.user, "roles": frappe.get_roles()}
+
+
 def _redis_queue_depth(site: str, queue: str) -> int:
     cfg = load_config(frappe.local.conf)
     r = get_redis(cfg.redis_url)

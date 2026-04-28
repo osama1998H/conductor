@@ -176,6 +176,14 @@ commands = ["conductor.commands.conductor_group"]
 # Overriding Methods
 # ------------------------------
 #
+# Route HTTP /api/method/frappe.enqueue calls through Conductor's drop-in
+# wrapper. NOTE: this only intercepts HTTP API calls; intra-process Python
+# `frappe.enqueue(...)` calls still hit RQ directly. Per master §3 #13.
+override_whitelisted_methods = {
+    "frappe.enqueue": "conductor.frappe_compat.enqueue",
+}
+#
+# example of the original commented-out form (kept for reference):
 # override_whitelisted_methods = {
 # 	"frappe.desk.doctype.event.event.get_events": "conductor.event.get_events"
 # }
