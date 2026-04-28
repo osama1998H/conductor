@@ -544,7 +544,57 @@ Roughly the order the writing-plans skill should structure the plan in. Detailed
 
 ## 15. Phase 3 hand-off notes (carry-forward to Phase 4)
 
-To be filled in at the end of Phase 3 implementation, not now.
+(Filled in 2026-04-28 — Phase 3 ship date.)
+
+### What shipped
+
+- `www/conductor-dashboard.html` Vue 3 SPA with 6 tabs (Overview, Live Feed, Jobs, DLQ, Schedules, Workers).
+- 12 whitelisted endpoints in `conductor.api.dashboard` (`get_state`, `get_job`, `retry_job`, `cancel_job`, `get_dlq_entry`, `dlq_retry`, `dlq_discard`, `dlq_edit_and_retry`, `schedule_run_now`, `schedule_set_enabled`, `get_schedule_next_fires`, `get_worker`).
+- Per-job realtime event family `conductor:job:{job_id}` with `doctype="Conductor Job", docname=job_id` for room scoping (per §8.6.1 spike fix). Events fire from `dispatcher.py` (QUEUED), `worker.py` (RUNNING / SUCCEEDED / SCHEDULED_RETRY / DLQ / TIMED_OUT), `cancellation.py` (CANCELLED).
+- Two-tier permission model: `System Manager` (full access) + `Conductor Operator` (read + retry / cancel / run-now). DLQ discard, payload edit-and-retry, schedule enable/disable are System-Manager-only.
+- Polling at 2 s default for aggregates (configurable via `site_config.conductor.dashboard_poll_interval_ms`).
+- Standalone vite project at `apps/conductor/dashboard/` (HRMS-roster pattern); single-file Vue 3 SFCs with `<style scoped>`. Total bundle: ~96 kB / ~36 kB gzipped.
+- Test additions: 7 unit tests for `emit_job_event`, 8 unit tests for `is_json_safe`, 5 perm-helper tests for `api.dashboard`, 17 site-skipped integration tests for endpoints (run via `bench run-tests`), 1 chaos test asserting `doctype`/`docname` scoping. **Final pytest count: 130 passed + 17 skipped, 0 regressions.** Frappe DocType tests still at 32. Chaos suite still at 5 baseline + 1 new = 6.
+- Master design footnoted (UI delivery refinement; realtime event family settled).
+- README updated with operator section + build instructions + `bench clear-cache` step after fresh builds.
+
+### Real bugs / surprises during execution
+
+1. **Spike #1 (Task 1) caught a load-bearing design bug.** The original spec planned to use `frappe.publish_realtime(event="conductor:job:abc", ...)` alone for per-job scoping. Reading `realtime.py:69–71` revealed that without `room`/`user`/`doctype`/`docname`, Frappe defaults to `room="all"` — every System User socket auto-joins that room at connect — so the events would have broadcast site-wide. Fix: pass `doctype="Conductor Job", docname=job_id`. Spec §8.4 and the plan's Task 4 / 17 / 19 / 27 were amended (commit `db9035f`) before any production code landed.
+
+2. **Plan's `_enqueue_for_retry(method, queue=..., args=..., kwargs=...)` signature was wrong.** `dispatcher.enqueue` is `enqueue(method, *, queue=None, timeout=None, max_attempts=None, idempotency_key=None, **kwargs)` — there are no `args=` or `kwargs=` named parameters. The Task 11 implementer caught this; same correction applied at Tasks 12 and 13. **Lesson:** spec authors should `grep -n "^def enqueue"` against the actual function before transcribing call shapes from memory.
+
+3. **`frappe.throw(_(msg), exc_class)` doesn't work in pytest without a Frappe site.** The Task 9 implementer hit `FileNotFoundError` from `frappe.logger()` triggered by the translation call. Substituted `raise frappe.PermissionError(msg)` (and similar for `DoesNotExistError`, `ValidationError`). Frappe's HTTP layer still maps the exception type to the right status code; the only loss is a Frappe error-log entry that wasn't useful for permission denials anyway.
+
+4. **`@frappe.whitelist()` reads `frappe.local.flags.in_test`** before the function body runs. Tests that call whitelisted endpoints directly (without `frappe.set_user()`) need `monkeypatch.setattr(frappe.local, "flags", _dict(in_test=False), raising=False)`. The pattern was reused across all dashboard endpoint tests.
+
+5. **Frappe caches `www/*.html` at startup.** After `vite build` overwrites `www/conductor-dashboard.html`, the running bench server keeps serving the old version until `bench --site SITE clear-cache` (or restart). Documented in README's Dashboard build section. Phase 4 should consider whether to add a post-build hook that clears the cache automatically.
+
+6. **`useDetailSubscription` returns a plain object with `data` as a ref**, not a ref itself. Plan example showed `const detail = useDetailSubscription(...)` then `detail.value` — that's wrong; the correct destructure is `const { data: detail } = useDetailSubscription(...)`. Caught by the Task 20 implementer.
+
+7. **`Conductor Schedule` autoname is `field:schedule_name`**, not `field:name`. Test seeds had to use `schedule_name`. Caught by the Task 13 implementer.
+
+### Residual limitations (accepted; deferred)
+
+1. **17 endpoint tests are site-skipped.** They need a Frappe site context for DB inserts (`frappe.get_doc({...}).insert()`). pytest in the bench env doesn't bootstrap a site; running `bench --site frappe.localhost run-tests --app conductor` does. Phase 3.5 / 4 should either (a) add a pytest plugin that boots a Frappe site for `tests/`, or (b) move site-dependent tests to `conductor/conductor/doctype/<x>/test_*.py` style.
+
+2. **Chaos test only verifies the dispatcher's QUEUED emit**, not the worker-emitted RUNNING/SUCCEEDED/FAILED/DLQ events. Subprocess isolation prevents `unittest.mock.patch("frappe.publish_realtime")` from capturing emits in the worker process. The unit test `test_emit_targets_doctype_and_docname` covers the helper-level case for all transitions; an end-to-end check would require either a Redis pub/sub sniffer or a real Socket.IO test client.
+
+3. **Schedules "Recent runs" is a heuristic.** It looks up `Conductor Job` rows by `method` field — same method called by multiple schedules will be conflated. The right fix is a `Conductor Job.schedule` link field (DocType schema change). Defer to Phase 3.5 / 4.
+
+4. **Overview throughput / error-rate cards stub at 0.** `get_state` returns `throughput_1h: 0` and `error_rate_1h: 0.0` — Phase 4 will populate these from a real time-series source (OTel / Prometheus). Until then the Overview dashboard's bar charts only show queue depth and DLQ counts, not throughput.
+
+5. **`bench restart` is required after a fresh `vite build`** for Frappe to serve the new entry HTML. Documented but not automated. A `dashboard:rebuild-and-clear` make-target would be a small Phase 4 polish.
+
+6. **`window.frappe?.boot?.user?.roles` shape unverified at runtime.** Frappe normally returns a string array; if it ever returns objects, `roles.includes("System Manager")` returns false and Operator buttons stay hidden. Verify in browser DevTools as part of the exit-criterion demo.
+
+### Phase 4 first-day backlog
+
+1. **Wire OTel exporter.** The dashboard's Trace sub-tab already shows `trace_id`; Phase 4 makes the link clickable via `conductor.trace_url_template` site_config, and the Sentry link populates from `Conductor Job Run.sentry_url`.
+2. **Add `Conductor Job.schedule` link field.** Fixes the Schedules-recent-runs heuristic noted in §11 risk #5.
+3. **Populate Overview throughput / error rate.** Phase 4 owns metrics; the `get_state` endpoint should hydrate `throughput_1h` and `error_rate_1h` from the metrics source (Prometheus query or OTLP histogram aggregate).
+4. **Site-bootstrap pytest fixture (or Frappe-test rehoming).** Stop deferring 17 dashboard-endpoint tests as skipped.
+5. **`useDetailSubscription` socketio reconnection.** When the WS connection drops and reconnects, the doc-room subscription is lost. Phase 4 should add a reconnect handler that re-issues `doc_subscribe` for the open detail.
 
 ---
 
@@ -553,3 +603,5 @@ To be filled in at the end of Phase 3 implementation, not now.
 | Date | Change | Author |
 |---|---|---|
 | 2026-04-28 | Initial Phase 3 dashboard spec. Refines master §4 in three ways: UI delivery is `www/` route (not Page DocType — see §2 #3); realtime events trimmed to per-job only (§8.1); DLQ edit-and-retry gated on JSON-safety (§9.4). | osama.m@aau.iq |
+| 2026-04-28 | §8.6.1 spike findings appended: `frappe.publish_realtime` event-only scoping is broadcast-to-`"all"`-room; per-job emits must pass `doctype`/`docname`. §8.4 + §8.5 + plan Tasks 4 / 17 / 19 / 20 / 27 amended accordingly. | osama.m@aau.iq |
+| 2026-04-28 | §15 hand-off filled in. Phase 3 ship complete. | osama.m@aau.iq |
