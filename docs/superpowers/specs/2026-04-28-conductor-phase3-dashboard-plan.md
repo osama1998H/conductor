@@ -359,6 +359,15 @@ def test_emit_uses_after_commit():
     assert mock_pub.call_args.kwargs["after_commit"] is True
 
 
+def test_emit_targets_doctype_and_docname():
+    """Per spec §8.6.1: delivery scope is doctype/docname; event= is just a label."""
+    with patch("frappe.publish_realtime") as mock_pub:
+        emit_job_event("abc-123", "RUNNING")
+    kwargs = mock_pub.call_args.kwargs
+    assert kwargs["doctype"] == "Conductor Job"
+    assert kwargs["docname"] == "abc-123"
+
+
 def test_emit_does_not_include_traceback():
     """Tracebacks can be tens of KB; not in the realtime payload."""
     with patch("frappe.publish_realtime") as mock_pub:
@@ -405,9 +414,13 @@ def emit_job_event(job_id: str, status: str, **fields) -> None:
     for k, v in fields.items():
         if k in _REALTIME_FIELDS and v is not None:
             payload[k] = v
+    # doctype/docname scope delivery to the per-doc Socket.IO room
+    # (doc:Conductor Job/{job_id}); event= is only a label. See spec §8.6.1.
     frappe.publish_realtime(
         event=f"conductor:job:{job_id}",
         message=payload,
+        doctype="Conductor Job",
+        docname=job_id,
         after_commit=True,
     )
 ```
@@ -418,7 +431,7 @@ def emit_job_event(job_id: str, status: str, **fields) -> None:
 pytest tests/test_emit_job_event.py -v
 ```
 
-Expected: 6 passed.
+Expected: 7 passed.
 
 - [ ] **Step 5: Run full suite to confirm no regressions**
 
@@ -426,7 +439,7 @@ Expected: 6 passed.
 pytest tests/ -q
 ```
 
-Expected: 113 passed (107 + 6 new).
+Expected: 114 passed (107 + 7 new).
 
 - [ ] **Step 6: Commit**
 
@@ -495,7 +508,7 @@ Expected: zero hits after the dispatcher edit. If a test references it, update t
 pytest tests/ -q
 ```
 
-Expected: still green (113 passed).
+Expected: still green (114 passed).
 
 - [ ] **Step 5: Commit**
 
@@ -619,7 +632,7 @@ This means a timed-out job that exhausts retries fires both `DLQ` (from `_move_t
 pytest tests/ -q
 ```
 
-Expected: 113 passed (no new tests yet; the worker has Frappe-doctype-test coverage at 32 tests but those are run via `bench run-tests`, not pytest. The worker's pytest coverage relies on existing tests still passing).
+Expected: 114 passed (no new tests yet; the worker has Frappe-doctype-test coverage at 32 tests but those are run via `bench run-tests`, not pytest. The worker's pytest coverage relies on existing tests still passing).
 
 - [ ] **Step 9: Run Frappe DocType tests too**
 
@@ -676,7 +689,7 @@ With:
 pytest tests/ -q
 ```
 
-Expected: 113 passed.
+Expected: 114 passed.
 
 - [ ] **Step 4: Commit**
 
@@ -1876,13 +1889,36 @@ export function userRoles() {
 - [ ] **Step 2: Create `realtime.js`**
 
 ```js
-export function subscribe(eventName, callback) {
+// Spec §8.6.1: per-doc events ride the doc:{Doctype}/{name} room. The
+// page must call doc_subscribe to join the room AND on(event_name) to
+// match the Socket.IO event-name label. Both are required.
+
+function _rt() {
   if (!window.frappe?.realtime) {
     console.warn("frappe.realtime not available; running outside Desk?");
-    return () => {};
+    return null;
   }
-  window.frappe.realtime.on(eventName, callback);
-  return () => window.frappe.realtime.off(eventName, callback);
+  return window.frappe.realtime;
+}
+
+export function subscribeDoc(doctype, docname, eventName, callback) {
+  const rt = _rt();
+  if (!rt) return () => {};
+  rt.doc_subscribe(doctype, docname);
+  rt.on(eventName, callback);
+  return () => {
+    rt.off(eventName, callback);
+    rt.doc_unsubscribe(doctype, docname);
+  };
+}
+
+// Generic event-only subscription (no doc room) — for site-wide events
+// like "list_update". Use sparingly; prefer subscribeDoc for per-entity.
+export function subscribe(eventName, callback) {
+  const rt = _rt();
+  if (!rt) return () => {};
+  rt.on(eventName, callback);
+  return () => rt.off(eventName, callback);
 }
 ```
 
@@ -1973,20 +2009,23 @@ git commit -m "feat(dashboard): useDashboardState polling composable with refcou
 
 ```js
 import { ref, onBeforeUnmount, watch } from "vue";
-import { subscribe } from "../realtime";
-import { api } from "../api";
+import { subscribeDoc } from "../realtime";
 
 /**
  * Subscribe to per-entity realtime events for the open detail view.
  *
  *   const { data, refetch, unsubscribe } = useDetailSubscription(
- *     "conductor:job", jobIdRef, () => api.getJob(jobIdRef.value)
+ *     "Conductor Job",          // doctype — joins room doc:Conductor Job/{id}
+ *     "conductor:job",          // event-name prefix; full event = `${prefix}:${id}`
+ *     jobIdRef,
+ *     () => api.getJob(jobIdRef.value),
  *   );
  *
  * `data` is reactive and reflects the most recent realtime delta merged
- * over the most recent full fetch.
+ * over the most recent full fetch. See spec §8.6.1 for why doctype is
+ * required (event= alone broadcasts site-wide).
  */
-export function useDetailSubscription(eventPrefix, idRef, fetcher) {
+export function useDetailSubscription(doctype, eventPrefix, idRef, fetcher) {
   const data = ref(null);
   let unsub = () => {};
 
@@ -2002,7 +2041,7 @@ export function useDetailSubscription(eventPrefix, idRef, fetcher) {
       return;
     }
     const eventName = `${eventPrefix}:${idRef.value}`;
-    unsub = subscribe(eventName, (delta) => {
+    unsub = subscribeDoc(doctype, idRef.value, eventName, (delta) => {
       if (data.value) data.value = { ...data.value, ...delta };
       // Re-fetch full record on terminal-state transitions to load traceback.
       if (["FAILED", "DLQ", "SUCCEEDED", "TIMED_OUT", "CANCELLED"].includes(delta?.status)) {
@@ -2046,7 +2085,7 @@ Each section is one Vue page under `dashboard/src/pages/`. Build them in this or
 - Modify: `dashboard/src/pages/JobsPage.vue`
 - Create: `dashboard/src/components/StatusBadge.vue`, `dashboard/src/components/JsonViewer.vue`
 
-(Detailed implementation in spec §9.3. Use `getList("Conductor Job", { filters, fields: ["job_id","method","queue","status","attempt","enqueued_at","last_error_message"], order_by: "enqueued_at desc" })` for the master pane, `useDetailSubscription("conductor:job", jobIdRef, () => api.getJob(...))` for the detail pane. Filter bar = queue/status/method/time-range. Detail sub-tabs = Overview/Runs/Args/Trace. Retry button calls `api.retryJob(job_id)`; Cancel button calls `api.cancelJob(job_id)`; both are hidden if user lacks write perm.)
+(Detailed implementation in spec §9.3. Use `getList("Conductor Job", { filters, fields: ["job_id","method","queue","status","attempt","enqueued_at","last_error_message"], order_by: "enqueued_at desc" })` for the master pane, `useDetailSubscription("Conductor Job", "conductor:job", jobIdRef, () => api.getJob(jobIdRef.value))` for the detail pane (note the leading `doctype` arg per spec §8.6.1). Filter bar = queue/status/method/time-range. Detail sub-tabs = Overview/Runs/Args/Trace. Retry button calls `api.retryJob(job_id)`; Cancel button calls `api.cancelJob(job_id)`; both are hidden if user lacks write perm.)
 
 - [ ] **Step 1: Implement `StatusBadge.vue`** with the color matrix from spec §9.3 (green=SUCCEEDED, blue=RUNNING, yellow=QUEUED/SCHEDULED_RETRY, red=FAILED/DLQ/TIMED_OUT, grey=CANCELLED).
 
@@ -2207,6 +2246,8 @@ def test_job_emits_status_events_in_order(spawn_scheduler, fakemethod_failing):
                 "event": kwargs["event"],
                 "status": kwargs["message"]["status"],
                 "after_commit": kwargs.get("after_commit"),
+                "doctype": kwargs.get("doctype"),
+                "docname": kwargs.get("docname"),
             })
 
     with patch("frappe.publish_realtime", side_effect=capture_emit):
@@ -2214,11 +2255,16 @@ def test_job_emits_status_events_in_order(spawn_scheduler, fakemethod_failing):
         # Wait for worker to consume + transition through to DLQ.
         _wait_for_status(job_id, "DLQ", timeout=20)
 
-    statuses = [e["status"] for e in captured if e["event"].endswith(job_id)]
+    mine = [e for e in captured if e["event"].endswith(job_id)]
+    statuses = [e["status"] for e in mine]
     assert statuses[0] == "QUEUED"
     assert "RUNNING" in statuses
     assert statuses[-1] == "DLQ"
-    assert all(e["after_commit"] is True for e in captured if e["event"].endswith(job_id))
+    assert all(e["after_commit"] is True for e in mine)
+    # Spec §8.6.1: delivery scope is doctype/docname, not event=. The bug we
+    # are guarding against is event-only emits that broadcast site-wide.
+    assert all(e["doctype"] == "Conductor Job" for e in mine)
+    assert all(e["docname"] == job_id for e in mine)
 
 
 def _wait_for_status(job_id, target, timeout):
@@ -2477,6 +2523,6 @@ git tag v0.3.0
 - `emit_job_event(job_id, status, **fields)` — used identically in Task 4 (definition), 5–7 (call sites). ✓
 - `is_json_safe(value) -> bool` — Task 8 definition, Tasks 12 + 26 call sites. ✓
 - `dashboard.api.*` endpoint names — Task 17 wraps them; Tasks 20–25 use the same names. ✓
-- `useDetailSubscription(eventPrefix, idRef, fetcher)` signature — Task 19 definition; Task 20 call site (`useDetailSubscription("conductor:job", jobIdRef, () => api.getJob(...))`). ✓
+- `useDetailSubscription(doctype, eventPrefix, idRef, fetcher)` signature — Task 19 definition; Task 20 call site (`useDetailSubscription("Conductor Job", "conductor:job", jobIdRef, () => api.getJob(...))`). ✓
 
 **4. Rough effort estimate:** 30 tasks × ~20 min/task = ~10 hours of focused execution time, plus spike + chaos + demo overhead. Realistic ship window: 1.5–2 days for one engineer.

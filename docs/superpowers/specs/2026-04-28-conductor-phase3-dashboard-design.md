@@ -280,11 +280,13 @@ def emit_job_event(job_id: str, status: str, **fields) -> None:
     frappe.publish_realtime(
         event=f"conductor:job:{job_id}",
         message=payload,
-        after_commit=True,            # avoids stale-read races on detail re-fetch
+        doctype="Conductor Job",       # delivery scope: doc:Conductor Job/{job_id}
+        docname=job_id,                # see §8.6.1 — event= alone is just a label
+        after_commit=True,             # avoids stale-read races on detail re-fetch
     )
 ```
 
-`after_commit=True` is critical: without it, the SPA can receive a "RUNNING" event and immediately re-fetch `get_job`, only to read the still-uncommitted QUEUED row.
+`doctype` + `docname` are the **delivery-scope** parameters; without them events broadcast to the site-wide `"all"` room (see §8.6.1 for the spike that uncovered this). `after_commit=True` is critical: without it, the SPA can receive a "RUNNING" event and immediately re-fetch `get_job`, only to read the still-uncommitted QUEUED row.
 
 ### 8.5 Frontend subscription pattern
 
@@ -292,11 +294,15 @@ def emit_job_event(job_id: str, status: str, **fields) -> None:
 // pages/JobsPage.vue, on entering #/jobs/:job_id
 import { useDetailSubscription } from '../stores/useDetailSubscription'
 
-const { data, unsubscribe } = useDetailSubscription('conductor:job', job_id)
+const { data, unsubscribe } = useDetailSubscription(
+    'Conductor Job',                  // doctype — joins room doc:Conductor Job/{id}
+    'conductor:job',                  // event-name prefix
+    job_id,
+)
 onBeforeUnmount(unsubscribe)
 ```
 
-`useDetailSubscription` wraps `frappe.realtime.on(eventName, cb)` + cleanup on unmount + automatic re-fetch of the full record on terminal-state transitions.
+`useDetailSubscription` (a) calls `frappe.realtime.doc_subscribe(doctype, docname)` to join the per-doc room, (b) calls `frappe.realtime.on(eventName, cb)` to listen for the event-name label, (c) on unmount calls `doc_unsubscribe` + `off`, and (d) auto-refetches the full record on terminal-state transitions to load the traceback.
 
 ### 8.6 Pre-implementation spike (Task 1 of plan)
 
