@@ -72,8 +72,43 @@ with DB **2** forced.
 
 ## Status
 
-Phase 0 of 6. See `docs/superpowers/specs/2026-04-27-conductor-master-design.md`
+Phase 2 of 6. See `docs/superpowers/specs/2026-04-27-conductor-master-design.md`
 for the full roadmap.
+
+## Operations (Phase 2+)
+
+Conductor has two long-lived processes per site:
+
+- **`bench conductor worker`** — executes jobs from queue streams.
+- **`bench conductor scheduler`** — singleton per site; owns the cron loop, retry-delay drain, dead-worker reap, and orphan sweep.
+
+### Procfile
+
+A typical bench Procfile entry alongside the existing services:
+
+```
+conductor_worker:    bench --site frappe.localhost conductor worker --queue default --concurrency 4
+conductor_scheduler: bench --site frappe.localhost conductor scheduler
+```
+
+Multiple `conductor_scheduler` instances are safe — only one holds the lock; the others poll. If the lock holder dies, a peer takes over within ~20 s (master Phase 2 exit criterion).
+
+### Schedule admin
+
+```
+$ bench --site SITE conductor schedule list
+$ bench --site SITE conductor schedule enable <name>
+$ bench --site SITE conductor schedule disable <name>
+$ bench --site SITE conductor schedule run-now <name>
+```
+
+`run-now` fires the schedule's payload immediately via `conductor.enqueue` and updates `last_status` / `last_job` on the schedule row, but does **not** advance `last_run_at` — the cron cadence is unchanged.
+
+### Schedules in the Desk
+
+Create / edit schedules in **Conductor Schedule** under the Conductor module. Required fields: `cron_expression`, `timezone` (defaults to UTC), `method` (dotted path), `queue`. Validation runs the cron expression through `croniter` on save; bad expressions are rejected with a Frappe validation error.
+
+Cron is at-least-once across scheduler crashes — if a scheduler dies between `conductor.enqueue(...)` and the `next_run_at` update, the next holder re-fires the schedule. Make your `method` idempotent if duplicate execution would corrupt state.
 
 ## Contributing
 
