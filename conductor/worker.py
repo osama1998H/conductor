@@ -33,7 +33,7 @@ from conductor.config import load_config
 from conductor.context import set_context, start_watchdog
 from conductor.execution_lock import acquire_exec_lock, release_exec_lock
 from conductor.logging import get_logger, setup_logging
-from conductor.messages import JobMessage, decode, encode
+from conductor.messages import JobMessage, decode, emit_job_event, encode
 from conductor.otel import setup_otel
 from conductor.retry import RetryPolicy
 from conductor.scheduled import schedule_message
@@ -116,6 +116,7 @@ def _set_job_running(job_id: str, worker_id: str) -> None:
         update_modified=False,
     )
     frappe.db.commit()
+    emit_job_event(job_id, "RUNNING")
 
 
 def _set_job_succeeded(job_id: str, result) -> None:
@@ -126,6 +127,7 @@ def _set_job_succeeded(job_id: str, result) -> None:
         update_modified=False,
     )
     frappe.db.commit()
+    emit_job_event(job_id, "SUCCEEDED")
 
 
 def _resolve_policy_from_msg(msg: JobMessage) -> RetryPolicy:
@@ -176,6 +178,13 @@ def _schedule_retry(msg: JobMessage, delay_seconds: float, redis_client, site: s
         update_modified=False,
     )
     frappe.db.commit()
+    emit_job_event(
+        msg.job_id,
+        "SCHEDULED_RETRY",
+        attempt=new_msg.attempt,
+        max_attempts=msg.max_attempts,
+        next_run_at=next_run.replace(tzinfo=None).isoformat(),
+    )
 
 
 def _move_to_dlq(msg: JobMessage, exc: BaseException, redis_client, site: str, *, tb_str: str | None = None) -> None:
@@ -196,6 +205,16 @@ def _move_to_dlq(msg: JobMessage, exc: BaseException, redis_client, site: str, *
     }).insert(ignore_permissions=True)
     frappe.db.set_value("Conductor Job", msg.job_id, "status", "DLQ", update_modified=False)
     frappe.db.commit()
+    emit_job_event(
+        msg.job_id,
+        "DLQ",
+        attempt=msg.attempt,
+        max_attempts=msg.max_attempts,
+        queue=msg.queue,
+        method=msg.method,
+        last_error_type=type(exc).__name__,
+        last_error_message=str(exc)[:140],
+    )
 
 
 def _write_job_run_row(
@@ -380,6 +399,14 @@ def _handle_one(
                         _move_to_dlq(msg, exc, redis_client, site, tb_str=exc_tb)
                         frappe.db.set_value("Conductor Job", msg.job_id, "status", "TIMED_OUT", update_modified=False)
                         frappe.db.commit()
+                        emit_job_event(
+                            msg.job_id,
+                            "TIMED_OUT",
+                            attempt=msg.attempt,
+                            max_attempts=msg.max_attempts,
+                            last_error_type=type(exc).__name__ if exc else "TimeoutError",
+                            last_error_message=str(exc)[:140] if exc else "deadline exceeded",
+                        )
                 elif policy.should_retry(exc, msg.attempt):
                     delay = policy.compute_next_delay(msg.attempt)
                     _schedule_retry(msg, delay, redis_client, site)
