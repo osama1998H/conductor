@@ -249,3 +249,64 @@ def test_dlq_edit_and_retry_dispatches_safe_edit(monkeypatch):
     with _as_roles("System Manager"):
         result = dashboard.dlq_edit_and_retry("dlq-e2", "[]", '{"a":99}')
     assert result == "new-id"
+
+
+# ---------------------------------------------------------------------------
+# Schedule endpoint tests
+# ---------------------------------------------------------------------------
+
+def _ensure_default_queue():
+    if not frappe.db.exists("Conductor Queue", "default"):
+        frappe.get_doc({
+            "doctype": "Conductor Queue",
+            "queue_name": "default",
+            "enabled": 1,
+        }).insert(ignore_permissions=True)
+        frappe.db.commit()
+
+
+def _seed_schedule(name="sch1", enabled=1, cron="0 8 * * *"):
+    _ensure_default_queue()
+    frappe.get_doc({
+        "doctype": "Conductor Schedule",
+        "schedule_name": name,
+        "cron_expression": cron,
+        "timezone": "UTC",
+        "method": "x.y",
+        "queue": "default",
+        "enabled": enabled,
+    }).insert(ignore_permissions=True)
+    frappe.db.commit()
+
+
+@pytest.mark.skipif(not _has_site(), reason="needs Frappe site context")
+def test_schedule_run_now_allowed_for_operator():
+    _seed_schedule("sch-run")
+    with _as_roles("Conductor Operator"), \
+         patch.object(dashboard, "_enqueue_for_retry", return_value="job-id"):
+        result = dashboard.schedule_run_now("sch-run")
+    assert result == "job-id"
+
+
+@pytest.mark.skipif(not _has_site(), reason="needs Frappe site context")
+def test_schedule_set_enabled_rejects_operator():
+    _seed_schedule("sch-en1")
+    with _as_roles("Conductor Operator"):
+        with pytest.raises(frappe.PermissionError):
+            dashboard.schedule_set_enabled("sch-en1", False)
+
+
+@pytest.mark.skipif(not _has_site(), reason="needs Frappe site context")
+def test_schedule_set_enabled_allowed_for_sysmgr():
+    _seed_schedule("sch-en2", enabled=1)
+    with _as_roles("System Manager"):
+        dashboard.schedule_set_enabled("sch-en2", False)
+    assert frappe.db.get_value("Conductor Schedule", "sch-en2", "enabled") == 0
+
+
+@pytest.mark.skipif(not _has_site(), reason="needs Frappe site context")
+def test_get_schedule_next_fires():
+    _seed_schedule("sch-next", cron="*/5 * * * *")
+    with _as_roles("Conductor Operator"):
+        fires = dashboard.get_schedule_next_fires("sch-next", count=3)
+    assert len(fires) == 3

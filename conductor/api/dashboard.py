@@ -288,3 +288,59 @@ def dlq_edit_and_retry(name: str, args_json: str, kwargs_json: str) -> str:
     })
     frappe.db.commit()
     return new_id
+
+
+# ---------------------------------------------------------------------------
+# Schedule endpoints
+# ---------------------------------------------------------------------------
+
+from croniter import croniter  # noqa: E402
+from datetime import datetime, timezone  # noqa: E402
+
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    ZoneInfo = None  # type: ignore
+
+
+@frappe.whitelist()
+def schedule_run_now(name: str) -> str:
+    _require_read()
+    if not (frappe.has_permission("Conductor Schedule", "write")
+            or "Conductor Operator" in frappe.get_roles()):
+        raise frappe.PermissionError("Not permitted")
+    sch = frappe.get_doc("Conductor Schedule", name)
+    kwargs = _decode_b64_msgpack(sch.kwargs) or {}
+    return _enqueue_for_retry(sch.method, queue=sch.queue, **kwargs)
+
+
+@frappe.whitelist()
+def schedule_set_enabled(name: str, enabled: bool) -> None:
+    _require_destructive()
+    enabled_int = 1 if (enabled is True or str(enabled).lower() in {"1", "true"}) else 0
+    frappe.db.set_value("Conductor Schedule", name, "enabled", enabled_int)
+    frappe.db.commit()
+
+
+@frappe.whitelist()
+def get_schedule_next_fires(name: str, count: int = 10) -> list[str]:
+    _require_read()
+    sch = frappe.db.get_value(
+        "Conductor Schedule", name,
+        ["cron_expression", "timezone"], as_dict=True,
+    )
+    if not sch:
+        raise frappe.DoesNotExistError("Schedule not found")
+
+    tz_name = sch.timezone or "UTC"
+    if ZoneInfo:
+        try:
+            tz = ZoneInfo(tz_name)
+        except Exception:
+            tz = ZoneInfo("UTC")
+    else:
+        tz = timezone.utc
+
+    base = datetime.now(tz)
+    it = croniter(sch.cron_expression, base)
+    return [it.get_next(datetime).isoformat() for _ in range(int(count))]
