@@ -344,3 +344,31 @@ def get_schedule_next_fires(name: str, count: int = 10) -> list[str]:
     base = datetime.now(tz)
     it = croniter(sch.cron_expression, base)
     return [it.get_next(datetime).isoformat() for _ in range(int(count))]
+
+
+# ---------------------------------------------------------------------------
+# Worker endpoint
+# ---------------------------------------------------------------------------
+
+@frappe.whitelist()
+def get_worker(worker_id: str) -> dict[str, Any]:
+    _require_read()
+    if not frappe.db.exists("Conductor Worker", worker_id):
+        raise frappe.DoesNotExistError("Worker not found")
+
+    worker = frappe.get_doc("Conductor Worker", worker_id).as_dict()
+    last_hb = worker.get("last_heartbeat")
+    if last_hb:
+        delta = (frappe.utils.now_datetime() - last_hb).total_seconds()
+        worker["heartbeat_age_seconds"] = max(0, int(delta))
+    else:
+        worker["heartbeat_age_seconds"] = None
+
+    worker["recent_jobs"] = frappe.get_all(
+        "Conductor Job",
+        filters={"worker_id": worker_id},
+        fields=["job_id", "method", "queue", "status", "finished_at"],
+        order_by="finished_at desc",
+        limit=20,
+    )
+    return worker

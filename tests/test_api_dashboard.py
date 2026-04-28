@@ -310,3 +310,35 @@ def test_get_schedule_next_fires():
     with _as_roles("Conductor Operator"):
         fires = dashboard.get_schedule_next_fires("sch-next", count=3)
     assert len(fires) == 3
+
+
+# ---------------------------------------------------------------------------
+# Worker endpoint tests
+# ---------------------------------------------------------------------------
+
+def _seed_worker(worker_id="w1", status="ALIVE"):
+    frappe.get_doc({
+        "doctype": "Conductor Worker", "name": worker_id,
+        "host": "localhost", "pid": 12345, "queues": '["default"]',
+        "status": status, "last_heartbeat": frappe.utils.now_datetime(),
+        "started_at": frappe.utils.now_datetime(),
+    }).insert(ignore_permissions=True)
+    frappe.db.commit()
+
+
+@pytest.mark.skipif(not _has_site(), reason="needs Frappe site context")
+def test_get_worker_returns_detail_and_recent_jobs():
+    _ensure_default_queue()
+    _seed_worker("w1")
+    frappe.get_doc({
+        "doctype": "Conductor Job", "name": "wjob1", "job_id": "wjob1",
+        "queue": "default", "method": "x.y", "status": "SUCCEEDED",
+        "worker_id": "w1", "finished_at": "2026-04-28 10:00:00",
+    }).insert(ignore_permissions=True)
+    frappe.db.commit()
+
+    with _as_roles("Conductor Operator"):
+        result = dashboard.get_worker("w1")
+    assert result["name"] == "w1"
+    assert any(j["job_id"] == "wjob1" for j in result["recent_jobs"])
+    assert "heartbeat_age_seconds" in result
