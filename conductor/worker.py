@@ -34,7 +34,6 @@ from conductor.context import set_context, start_watchdog
 from conductor.execution_lock import acquire_exec_lock, release_exec_lock
 from conductor.logging import get_logger, setup_logging
 from conductor.messages import JobMessage, decode, emit_job_event, encode
-from conductor.otel import setup_otel
 from conductor.retry import RetryPolicy
 from conductor.scheduled import schedule_message
 from conductor.streams import CONSUMER_GROUP, dlq_key, ensure_consumer_group, stream_key
@@ -201,7 +200,6 @@ def _move_to_dlq(msg: JobMessage, exc: BaseException, redis_client, site: str, *
         "last_error_message": str(exc)[:140],
         "last_traceback": tb_str or traceback.format_exc(),
         "payload": json.dumps(encoded),
-        "trace_id": msg.trace_parent or "",
     }).insert(ignore_permissions=True)
     frappe.db.set_value("Conductor Job", msg.job_id, "status", "DLQ", update_modified=False)
     frappe.db.commit()
@@ -239,7 +237,6 @@ def _write_job_run_row(
         "started_at": started_at.replace(tzinfo=None) if started_at else None,
         "finished_at": finished_at.replace(tzinfo=None) if finished_at else None,
         "duration_ms": duration_ms,
-        "trace_id": msg.trace_parent or "",
     }
     if exc is not None:
         payload.update({
@@ -466,7 +463,6 @@ def _reclaim_into_pool(
 
 def run_worker_once(*, queues: list[str], concurrency: int, site: str, block_ms: int = 5000) -> None:
     """Test-only single iteration. Reclaim + read + execute synchronously."""
-    setup_otel(service_name="conductor")
     cfg = load_config(frappe.local.conf)
     r = get_redis(cfg.redis_url)
     worker_id = _make_worker_id()
@@ -503,7 +499,6 @@ def _install_signal_handlers():
 
 def run_worker(*, queues: list[str], concurrency: int, site: str, grace_seconds: int = 30) -> None:
     setup_logging(site=site)
-    setup_otel(service_name="conductor")
     cfg = load_config(frappe.local.conf)
     r = get_redis(cfg.redis_url)
     worker_id = _make_worker_id()

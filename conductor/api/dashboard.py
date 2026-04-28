@@ -166,7 +166,7 @@ def get_job(job_id: str) -> dict[str, Any]:
         filters={"job": job_id},
         fields=["attempt_number", "worker_id", "started_at", "finished_at",
                 "duration_ms", "status", "error_type", "error_message",
-                "traceback", "trace_id", "span_id", "sentry_event_id", "sentry_url"],
+                "traceback"],
         order_by="attempt_number asc",
     )
     return job

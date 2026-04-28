@@ -72,7 +72,8 @@ with DB **2** forced.
 
 ## Status
 
-Phase 3 of 6. See `docs/superpowers/specs/2026-04-27-conductor-master-design.md`
+Phase 3 of 5 (Phase 4 was Observability — removed; v1 stays focused on the
+job platform). See `docs/superpowers/specs/2026-04-27-conductor-master-design.md`
 for the full roadmap.
 
 ## Operations (Phase 2+)

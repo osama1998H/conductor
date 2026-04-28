@@ -53,7 +53,6 @@
           <button :class="{ active: subtab === 'runs' }" @click="subtab = 'runs'">Runs ({{ detail.runs?.length || 0
             }})</button>
           <button :class="{ active: subtab === 'args' }" @click="subtab = 'args'">Args</button>
-          <button :class="{ active: subtab === 'trace' }" @click="subtab = 'trace'">Trace</button>
         </nav>
 
         <section v-if="subtab === 'overview'">
@@ -102,13 +101,6 @@
           <JsonViewer :value="detail.args_decoded" />
           <h4>kwargs</h4>
           <JsonViewer :value="detail.kwargs_decoded" />
-        </section>
-
-        <section v-if="subtab === 'trace'">
-          <p>trace_id: <code>{{ detail.trace_id || '(none)' }}</code></p>
-          <p v-if="detail.runs?.[0]?.sentry_url">
-            <a :href="detail.runs[0].sentry_url" target="_blank">Sentry</a>
-          </p>
         </section>
       </div>
     </div>

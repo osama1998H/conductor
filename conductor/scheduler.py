@@ -155,10 +155,8 @@ def run_scheduler(
     from conductor.client import get_redis
     from conductor.config import load_config
     from conductor.logging import setup_logging
-    from conductor.otel import setup_otel
 
     setup_logging(site=site)
-    setup_otel(service_name="conductor-scheduler")
     cfg = load_config(frappe.local.conf)
     r = get_redis(cfg.redis_url)
     sites_path = frappe.local.sites_path

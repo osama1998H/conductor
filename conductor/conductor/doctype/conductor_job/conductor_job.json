@@ -10,7 +10,7 @@
   "section_args", "args", "kwargs", "args_preview", "kwargs_preview",
   "section_lifecycle", "attempt", "max_attempts", "timeout_seconds",
   "enqueued_at", "scheduled_at", "started_at", "finished_at", "next_run_at", "deadline",
-  "section_meta", "idempotency_key", "trace_id", "span_id",
+  "section_meta", "idempotency_key",
   "workflow_run_id", "step_id",
   "section_result", "last_error_type", "last_error_message", "last_traceback", "result_preview",
   "section_routing", "worker_id", "redis_msg_id"
@@ -43,8 +43,6 @@
 
   {"fieldname": "section_meta", "fieldtype": "Section Break", "label": "Metadata"},
   {"fieldname": "idempotency_key", "fieldtype": "Data", "label": "Idempotency Key"},
-  {"fieldname": "trace_id", "fieldtype": "Data", "label": "Trace ID"},
-  {"fieldname": "span_id", "fieldtype": "Data", "label": "Span ID"},
   {"fieldname": "workflow_run_id", "fieldtype": "Data", "label": "Workflow Run ID"},
   {"fieldname": "step_id", "fieldtype": "Data", "label": "Step ID"},
 

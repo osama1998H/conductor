@@ -49,7 +49,6 @@ def _row_to_jobmessage(row: dict, site: str, queue_doc: Any) -> JobMessage:
         timeout_seconds=int(row.get("timeout_seconds") or queue_doc.default_timeout or 300),
         enqueued_at=row["enqueued_at"].replace(tzinfo=timezone.utc) if row.get("enqueued_at") else datetime.now(timezone.utc),
         deadline=row["deadline"].replace(tzinfo=timezone.utc) if row.get("deadline") else None,
-        trace_parent="",
         idempotency_key=row.get("idempotency_key") or "",
         backoff=str(queue_doc.default_backoff or "exponential"),
         base_delay_seconds=int(queue_doc.default_base_delay_seconds or 2),

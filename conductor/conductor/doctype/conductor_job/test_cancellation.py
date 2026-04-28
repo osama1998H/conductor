@@ -21,7 +21,6 @@ def _sample_message(**overrides) -> JobMessage:
         timeout_seconds=60,
         enqueued_at=datetime(2026, 4, 27, 12, 0, tzinfo=timezone.utc),
         deadline=None,
-        trace_parent="",
         idempotency_key="",
         workflow_run_id="",
         step_id="",

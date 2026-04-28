@@ -19,7 +19,7 @@ A reliability-first background job platform for Frappe/ERPNext, built as a custo
 
 ## 2. Architecture (one paragraph)
 
-A **Dispatcher** library, embedded in every Frappe process, writes a `Conductor Job` row, takes an idempotency lock, and `XADD`s to a per-queue Redis Stream. Long-running **Worker** processes (`bench conductor worker`) consume those streams via consumer groups, execute the user function under an execution lock + timeout, write a `Conductor Job Run` row per attempt, and either ack on success, ZADD to a "scheduled" set for retry, or XADD to a DLQ stream. A **Scheduler** singleton (`bench conductor scheduler`) drains the scheduled set into the right queue stream, evaluates cron schedules, and reaps stalled workers. State is dual-tracked: Redis is the source of truth for *queueing*; MariaDB DocTypes are the source of truth for *history* and the data source for the Desk UI. OTel trace context flows through stream messages so producer + consumer spans link in any compatible backend.
+A **Dispatcher** library, embedded in every Frappe process, writes a `Conductor Job` row, takes an idempotency lock, and `XADD`s to a per-queue Redis Stream. Long-running **Worker** processes (`bench conductor worker`) consume those streams via consumer groups, execute the user function under an execution lock + timeout, write a `Conductor Job Run` row per attempt, and either ack on success, ZADD to a "scheduled" set for retry, or XADD to a DLQ stream. A **Scheduler** singleton (`bench conductor scheduler`) drains the scheduled set into the right queue stream, evaluates cron schedules, and reaps stalled workers. State is dual-tracked: Redis is the source of truth for *queueing*; MariaDB DocTypes are the source of truth for *history* and the data source for the Desk UI.
 
 A textual diagram is in the original system-design draft (kept inline for reference, not reproduced here).
 
@@ -40,7 +40,7 @@ These decisions are fixed across all phases. Per-phase brainstorms cannot reliti
 | 7 | Redis key namespace | `conductor:{site}:…` from day 1 | Forward-compatible with multi-tenant SaaS without a migration. |
 | 8 | DocType rollout | Schemas frozen here; each phase ships only the DocTypes it needs | Smaller phases, no dead surface in early DocTypes. |
 | 9 | Stream message schema | Frozen here (§7); unused fields stay `null` in early phases | No mid-rollout message format migration. |
-| 10 | OpenTelemetry | SDK wired through dispatch + worker code from Phase 0 as **no-op spans** (no exporter). Phase 4 adds the exporter. | Avoids retrofitting `start_as_current_span` calls everywhere later. |
+| 10 | _(removed)_ | OpenTelemetry tracing was a Phase 4 deliverable; the entire phase has been dropped (see §4). Observability is out of scope for v1 — a future cross-cutting app may handle it for the whole bench. | |
 | 11 | Dispatch ordering (Phase 0) | Idempotency check → insert `Conductor Job` (status=`QUEUED`) → `XADD` → `publish_realtime` | Simplest correct path. The "DB succeeded but XADD failed" case marks the row `DISPATCH_FAILED`. |
 | 12 | Outbox pattern | **Deferred to Phase 1 brainstorm**, with a strong default of *not* introducing an outbox table (current design). | Real decision once we have retry/DLQ in scope. |
 | 13 | `frappe.enqueue` shim | Available from Phase 0 as opt-in (`override_whitelisted_methods` in client `hooks.py`); RQ keeps running in parallel | Lets one client app start migrating immediately after Phase 0. |
@@ -69,13 +69,12 @@ Each phase below is shippable on its own and builds on the previous. **Each phas
 - `bench conductor worker --queue <name> [--concurrency N]` — long-running consumer.
 - `bench conductor doctor` — health check (Redis up, streams + groups created, default queues seeded).
 - Worker writes status transitions `QUEUED → RUNNING → SUCCEEDED|FAILED|TIMED_OUT`. **No retry, no DLQ in this phase.**
-- OTel SDK wired as no-op spans across dispatch + worker.
 - `frappe.enqueue` opt-in shim available.
 - Unit tests + an integration test that dispatches a known function and asserts the audit row.
 
 **Exit criterion:** Dispatching `frappe.utils.now()` from Desk via `conductor.enqueue` produces a `Conductor Job` row whose status transitions `QUEUED → RUNNING → SUCCEEDED` end-to-end with `started_at`/`finished_at` populated, while a worker is running. Killing the worker mid-job leaves the row in `RUNNING` (recovery is Phase 1's job).
 
-**Out of scope (this phase):** retries, DLQ, idempotency keys (the field exists in the schema but no Redis lock yet), scheduled/delayed jobs, scheduler process, **dead-worker reaping** (workers heartbeat from Phase 0 but stale rows are not cleaned up until Phase 2's reaper), dashboard, OTel exporter, workflows, pool workers.
+**Out of scope (this phase):** retries, DLQ, idempotency keys (the field exists in the schema but no Redis lock yet), scheduled/delayed jobs, scheduler process, **dead-worker reaping** (workers heartbeat from Phase 0 but stale rows are not cleaned up until Phase 2's reaper), dashboard, workflows, pool workers.
 
 ### Phase 1 — Reliability core
 
@@ -115,7 +114,7 @@ Each phase below is shippable on its own and builds on the previous. **Each phas
 
   - **Overview** — queue depths (live), throughput (last 1h/24h), error rate, DLQ counts.
   - **Live feed** — streaming list of recent jobs with status badges; click → drill.
-  - **Job detail** — timeline of attempts, args/kwargs (pretty-printed), traceback, OTel trace ID copy/link, Sentry link if present.
+  - **Job detail** — timeline of attempts, args/kwargs (pretty-printed), traceback.
   - **DLQ browser** — filter by queue/method, bulk actions: retry, discard, edit-and-retry.
   - **Schedules** — list + calendar view, next runs, last result.
   - **Workers** — registered workers, heartbeats, currently executing jobs.
@@ -124,23 +123,9 @@ Each phase below is shippable on its own and builds on the previous. **Each phas
 
 **Exit criterion:** Operator can fully diagnose a failed job (find it, see its traceback, retry it) without SSH or `bench console`.
 
-### Phase 4 — Observability
+### Phase 4 — _(removed)_
 
-**Ships:**
-- OTel exporter wiring: OTLP gRPC by default; service name + endpoint from `site_config.json`.
-- Spans now exported (replaces the no-op SDK from Phase 0); producer span + consumer span linked via `traceparent`.
-- Prometheus metrics endpoint **or** OTLP metrics export (decision in Phase 4 brainstorm):
-  - `conductor_jobs_dispatched_total{queue,site,name}`
-  - `conductor_jobs_succeeded_total` / `_failed_total` / `_dlq_total`
-  - `conductor_job_duration_seconds` (histogram)
-  - `conductor_queue_depth{queue,site}` (gauge sampled by scheduler)
-  - `conductor_worker_heartbeat_age_seconds`
-  - `conductor_retry_count{queue}`
-- Structured JSON logs with `trace_id`, `span_id`, `job_id`, `site`, `queue`, `attempt`.
-- Optional Sentry SDK integration: when `conductor.sentry_dsn` is set, exceptions auto-tag with job metadata; the Sentry issue URL is stored on `Conductor Job Run` for one-click access from the dashboard.
-- Dashboard: trace link in Job Detail uses a configurable URL template (`conductor.trace_url_template`).
-
-**Exit criterion:** A traced job shows producer + consumer spans in a local Jaeger/Tempo instance; Prometheus scrapes the metrics endpoint and shows non-zero values.
+Originally an "Observability" phase covering OpenTelemetry exporter wiring, Prometheus / OTLP metrics, structured trace-tagged logs, and Sentry integration. The phase was dropped (2026-04-28) because observability is a cross-cutting concern of the whole bench, not a job-platform feature; bundling it into Conductor would dilute the app's single responsibility ("reliability-first background job platform"). A separate, bench-wide observability app may revisit this later. The phase number is left as a gap; subsequent phases keep their original numbers.
 
 ### Phase 5 — Workflows
 
@@ -228,8 +213,6 @@ Phase 0 ships this. Fixtures seed `default`, `short`, `long`, `critical`.
 | `next_run_at` | Datetime (indexed) | For `SCHEDULED_RETRY` |
 | `deadline` | Datetime | |
 | `idempotency_key` | Data (indexed) | Hashed key value |
-| `trace_id` | Data | OTel |
-| `span_id` | Data | OTel dispatch span |
 | `workflow_run_id` | Link → `Conductor Workflow Run` | Phase 5 |
 | `step_id` | Data | Phase 5 |
 | `last_error_type` | Data | |
@@ -276,10 +259,6 @@ Phase 0 ships this. Heartbeats every 5s.
 | `error_type` | Data | |
 | `error_message` | Small Text | |
 | `traceback` | Long Text | |
-| `trace_id` | Data | |
-| `span_id` | Data | |
-| `sentry_event_id` | Data | Phase 4 |
-| `sentry_url` | Data | Phase 4 |
 
 ### 6.5 `Conductor DLQ Entry` (Phase 1)
 
@@ -294,7 +273,6 @@ Phase 0 ships this. Heartbeats every 5s.
 | `last_traceback` | Long Text | |
 | `attempts` | Int | |
 | `payload` | Long Text | Full stream message JSON for edit-and-retry |
-| `trace_id` | Data | |
 | `status` | Select: PENDING_REVIEW / RETRIED / DISCARDED | Default PENDING_REVIEW |
 | `reviewed_by` | Link → User | |
 | `reviewed_at` | Datetime | |
@@ -342,7 +320,6 @@ Phase 0 ships this. Heartbeats every 5s.
 | `input_kwargs` | Long Text | |
 | `started_at` | Datetime | |
 | `finished_at` | Datetime | |
-| `trace_id` | Data | Root trace |
 | `last_error` | Long Text | |
 
 ### 6.9 `Conductor Workflow Step Run` (Phase 5)
@@ -376,7 +353,6 @@ max_attempts      : str (int)
 timeout_seconds   : str (int)
 enqueued_at       : str (ISO8601)
 deadline          : str (ISO8601 or "")
-trace_parent      : str (W3C traceparent or "")
 idempotency_key   : str ("" if none)            # Phase 1 honors this
 workflow_run_id   : str ("" if none)            # Phase 5
 step_id           : str ("" if none)            # Phase 5
@@ -396,7 +372,6 @@ conductor:{site}:idem:{hash}           # SET NX EX, value = job_id          [Pha
 conductor:{site}:lock:{job_id}         # SET NX EX, value = worker_id       [Phase 1+]
 conductor:{site}:workers               # HSET worker_id → last_heartbeat_iso
 conductor:{site}:scheduler:lock        # singleton lock, SET NX EX           [Phase 2+]
-conductor:{site}:metrics:{name}        # gauges/counters where DB-roundtrip is too slow [Phase 4+]
 conductor:{site}:rate:{queue}          # token bucket                        [Phase 6+]
 ```
 
@@ -420,7 +395,6 @@ What every later phase can rely on:
 | Delay drainer behavior (in-worker → scheduler) | Phase 1 → Phase 2 | Phase 2 |
 | `bench conductor scheduler` singleton + reaper | Phase 2 | Phase 2 |
 | Real-time dashboard events: per-job `conductor:job:{id}` events with `doctype="Conductor Job"`, `docname=job_id` for room scoping; aggregates use polling (see [Phase 3 spec](2026-04-28-conductor-phase3-dashboard-design.md) §8 + §8.6.1). Existing global `conductor:job_queued` is **replaced** (breaking change). | Phase 3 | Phase 3 |
-| OTel exporter + metrics names (§Phase 4) | Phase 4 | Phase 4 |
 | Workflow definition + advancer | Phase 5 | Phase 5 |
 | Pool workers + per-tenant rate limits | Phase 6 | Phase 6 |
 
@@ -433,9 +407,8 @@ What every later phase can rely on:
 3. **Hard timeout enforcement** — Python threads can't be force-killed. v1 uses cooperative cancellation + watchdog. If real hard-kill is needed, subprocess-per-job is a follow-up.
 4. **Lua scripts for atomic transitions** must stay single-key to keep cluster compatibility open (§3 #15).
 5. **Workflow definition drift mid-run** — pinned via §3 #20; need an alert when a run is using a stale pinned version.
-6. **Stream growth** — `MAXLEN ~ 10000` + reaper-driven `XTRIM MINID` keeps memory bounded; revisit after Phase 4 metrics show real volume.
-7. **Sentry/OTel cardinality** — be careful tagging spans/metrics with `name` (job method); cap unique series per queue.
-8. **Non-Python producers** (e.g., .NET Questify) — out of scope for v1, but the language-neutral msgpack message format keeps the door open.
+6. **Stream growth** — `MAXLEN ~ 10000` + reaper-driven `XTRIM MINID` keeps memory bounded; revisit once production volume is observable.
+7. **Non-Python producers** (e.g., .NET Questify) — out of scope for v1, but the language-neutral msgpack message format keeps the door open.
 
 ---
 
@@ -466,3 +439,4 @@ For every phase 0…6:
 |---|---|---|
 | 2026-04-27 | Initial master design. | osama.m@aau.iq |
 | 2026-04-28 | Phase 3 footnotes: UI delivery refined to `www/` route + standalone vite project; realtime event family settled as `conductor:job:{id}` with `doctype`/`docname` room scoping. | osama.m@aau.iq |
+| 2026-04-28 | **Phase 4 (Observability) removed.** OpenTelemetry exporter, Prometheus/OTLP metrics, structured trace-tagged logs, and Sentry integration are out of scope for v1. Conductor's responsibility is "reliability-first background jobs"; observability is a bench-wide concern best handled by a separate app. Code: removed `conductor.otel`, dropped `opentelemetry-*` runtime deps, stripped `trace_id`/`span_id`/`trace_parent`/`sentry_event_id`/`sentry_url` from DocType schemas, dispatcher, worker, scheduler, sweeper, stream message schema (§7), Redis topology (§8), inter-phase contracts (§9), and risks (§10). Python exception tracebacks (`last_traceback` / `traceback` fields) are **kept** — those are diagnostic data for the job platform itself, not observability instrumentation. Phase 5/6 numbering preserved (gap at Phase 4). | osama.m@aau.iq |

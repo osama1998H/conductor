@@ -83,7 +83,6 @@ class JobMessage:
     timeout_seconds: int = 300
     enqueued_at: datetime | None = None
     deadline: datetime | None = None
-    trace_parent: str = ""
     idempotency_key: str = ""
     workflow_run_id: str = ""
     step_id: str = ""
@@ -130,7 +129,6 @@ def encode(msg: JobMessage) -> dict[str, str]:
         "timeout_seconds": str(msg.timeout_seconds),
         "enqueued_at": _iso(msg.enqueued_at),
         "deadline": _iso(msg.deadline),
-        "trace_parent": msg.trace_parent or "",
         "idempotency_key": msg.idempotency_key or "",
         "workflow_run_id": msg.workflow_run_id or "",
         "step_id": msg.step_id or "",
@@ -176,7 +174,6 @@ def decode(fields_dict: dict[str, str]) -> JobMessage:
         timeout_seconds=int(fields_dict["timeout_seconds"]),
         enqueued_at=_parse_iso(fields_dict["enqueued_at"]),
         deadline=_parse_iso(fields_dict.get("deadline", "")),
-        trace_parent=fields_dict.get("trace_parent", ""),
         idempotency_key=fields_dict.get("idempotency_key", ""),
         workflow_run_id=fields_dict.get("workflow_run_id", ""),
         step_id=fields_dict.get("step_id", ""),

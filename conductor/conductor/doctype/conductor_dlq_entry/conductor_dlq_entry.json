@@ -8,7 +8,7 @@
  "field_order": [
   "job", "queue", "moved_at", "attempts", "status",
   "section_error", "last_error_type", "last_error_message", "last_traceback",
-  "section_payload", "payload", "trace_id",
+  "section_payload", "payload",
   "section_review", "reviewed_by", "reviewed_at", "review_notes"
  ],
  "fields": [
@@ -25,7 +25,6 @@
 
   {"fieldname": "section_payload", "fieldtype": "Section Break", "label": "Payload"},
   {"fieldname": "payload", "fieldtype": "Long Text", "label": "Payload (JSON)"},
-  {"fieldname": "trace_id", "fieldtype": "Data", "label": "Trace ID"},
 
   {"fieldname": "section_review", "fieldtype": "Section Break", "label": "Review (Phase 3)"},
   {"fieldname": "reviewed_by", "fieldtype": "Link", "options": "User", "label": "Reviewed By"},
