@@ -185,6 +185,15 @@ def spawn_scheduler(site):
         _terminate_pgroup(proc)
 
 
+@pytest.fixture
+def fakemethod_failing():
+    """Returns the dotted-path of a function that always raises.
+
+    Uses conductor.demo.boom, which already serves this purpose throughout the
+    test suite. Adding a separate always_raises would duplicate intent."""
+    return "conductor.demo.boom"
+
+
 def wait_for_status(job_id: str, expected: str, *, timeout: float = 30.0) -> str:
     """Poll the DB until job reaches `expected` or timeout."""
     import frappe
