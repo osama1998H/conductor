@@ -302,6 +302,18 @@ onBeforeUnmount(unsubscribe)
 
 **Confirm `frappe.publish_realtime(event="conductor:job:abc", message={...}, after_commit=True)` actually delivers only to clients with `frappe.realtime.on("conductor:job:abc", ...)` and not as a site-wide broadcast in Frappe 15.106.0.** If broadcast-only, the bandwidth model still works (clients filter by event name) but it informs the test design. ~30 minutes of investigation.
 
+### 8.6.1 Spike Findings (2026-04-28)
+
+**How `publish_realtime` scopes delivery.** When called with only `event=` and `message=` (no `room=`, `user=`, `doctype=`, or `docname=`), Frappe's Python layer falls through to the final else-branch at `realtime.py:69–71` and sets `room = get_site_room()`, which returns the string `"all"` (`realtime.py:158–159`). That room string, together with the event name and the site namespace, is then published to Redis as a JSON payload (`realtime.py:100–115`). On the Node side (`realtime/index.js:51–52`), the subscriber reads this payload and calls `io.of(namespace).to(message.room).emit(message.event, message.message)` — a standard Socket.IO room-targeted emit. The event name (`message.event`) is therefore the Socket.IO *event name* used in the emit, while `message.room` is the Socket.IO *room* that scopes which connected sockets receive it. Every System User socket is auto-joined to the `"all"` room at connection time (`realtime/handlers/frappe_handlers.js:11–13`), so a call with no explicit room delivers to **all Desk users on the site**. There is no per-event-name room; the event name is only a label carried inside the Socket.IO payload and matched by the client's `frappe.realtime.on("conductor:job:abc", cb)` listener.
+
+**Implication for this design.** The plan to use `event=f"conductor:job:{job_id}"` alone as the scoping mechanism does **not** limit delivery to operators viewing that specific job — it broadcasts to every connected Desk user and relies on each client's listener registration to filter. This is the "broadcast-only, client-filtered" worst case described in §8.6. The bandwidth model remains valid (messages are small, volume is bounded by the scheduler's tick rate), but three adjustments are required:
+
+1. **Per-job events:** Pass `doctype="Conductor Job", docname=job_id` to `publish_realtime` (the public API form; `realtime.py:67–68` computes `get_doc_room(doctype, docname)` = `"doc:Conductor Job/{job_id}"` internally). Do **not** pass the raw room string directly — that couples Conductor to an internal naming convention. The dashboard page must emit `frappe.realtime.trigger("doc_subscribe", {doctype, docname})` on mount and `doc_unsubscribe` on unmount to join/leave that room.
+
+2. **List-view events:** The overview and list pages that need live row updates should use `event="list_update"` with `doctype="Conductor Job"`. Frappe's special-case handler at `realtime.py:52–54` routes these to `doctype:Conductor Job` automatically, and all users subscribed to that doctype receive them. Do **not** invent a custom `event="conductor:job:list"` name without an explicit room — it would broadcast to all Desk users exactly as the per-job case would have.
+
+3. **Chaos-test assertions:** The monkeypatch approach (capture `frappe.publish_realtime` call args) remains the right technique, but the tests **must** assert that `doctype` and `docname` (or an explicit `room=`) are present on each captured call. An assertion that only checks `event=` would miss the precise bug this spike exposed.
+
 ---
 
 ## 9. Section-by-section content
