@@ -9,28 +9,53 @@ const props = defineProps({ status: String });
 
 const tone = computed(() => {
   switch (props.status) {
-    case "SUCCEEDED":       return "green";
+    case "SUCCEEDED": return "green";
     case "RUNNING":
-    case "ALIVE":           return "blue";
+    case "ALIVE": return "blue";
     case "QUEUED":
     case "SCHEDULED_RETRY": return "yellow";
     case "FAILED":
     case "DLQ":
     case "TIMED_OUT":
     case "DISPATCH_FAILED":
-    case "STALE":           return "red";
+    case "STALE": return "red";
     case "CANCELLED":
-    case "GONE":            return "grey";
-    default:                return "grey";
+    case "GONE": return "grey";
+    default: return "grey";
   }
 });
 </script>
 
 <style scoped>
-.badge        { font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 500; }
-.badge-green  { background: #dcfce7; color: #166534; }
-.badge-blue   { background: #dbeafe; color: #1e40af; }
-.badge-yellow { background: #fef3c7; color: #854d0e; }
-.badge-red    { background: #fee2e2; color: #991b1b; }
-.badge-grey   { background: #f1f5f9; color: #475569; }
+.badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 500;
+}
+
+.badge-green {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.badge-blue {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.badge-yellow {
+  background: #fef3c7;
+  color: #854d0e;
+}
+
+.badge-red {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.badge-grey {
+  background: #f1f5f9;
+  color: #475569;
+}
 </style>
