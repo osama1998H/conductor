@@ -1,14 +1,22 @@
 const DASHBOARD_PREFIX = "conductor.api.dashboard";
 
+function _csrfToken() {
+  // Frappe injects the token via `<script>window.csrf_token = "{{ csrf_token }}"</script>`
+  // in dashboard/index.html. During `vite dev` the literal stays unresolved, so we
+  // guard against it. Returns null if no real token is available; Frappe accepts
+  // GETs without a token, and POSTs will surface a 400 from the server (handled
+  // upstream as a toast).
+  const t = window.csrf_token;
+  if (!t || t === "{{ csrf_token }}") return null;
+  return t;
+}
+
 async function callMethod(method, params = {}, httpMethod = "GET") {
   const url = `/api/method/${method}`;
-  const opts = {
-    method: httpMethod,
-    credentials: "include",
-    headers: {
-      "X-Frappe-CSRF-Token": window.frappe?.csrf_token || "token",
-    },
-  };
+  const headers = {};
+  const csrf = _csrfToken();
+  if (csrf) headers["X-Frappe-CSRF-Token"] = csrf;
+  const opts = { method: httpMethod, credentials: "include", headers };
   let finalUrl = url;
   if (httpMethod === "GET") {
     const qs = new URLSearchParams(params).toString();

@@ -6,6 +6,11 @@
   </head>
   <body>
     <div id="app"></div>
+    <script>
+      // Frappe Jinja-renders the literal `{{ csrf_token }}` server-side at /conductor-dashboard.
+      // During `vite dev` this stays as the literal string; the SPA guards against that.
+      window.csrf_token = "{{ csrf_token }}";
+    </script>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

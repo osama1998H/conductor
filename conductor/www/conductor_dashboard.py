@@ -11,6 +11,7 @@ shell for unauthenticated visitors.
 """
 
 import frappe
+from frappe.sessions import get_csrf_token
 
 no_cache = 1
 
@@ -19,4 +20,8 @@ def get_context(context):
     if frappe.session.user == "Guest":
         frappe.local.flags.redirect_location = "/login?redirect-to=/conductor-dashboard"
         raise frappe.Redirect
+    # Inject csrf_token so the Jinja literal `{{ csrf_token }}` in
+    # dashboard/index.html resolves to a usable value. The SPA reads
+    # window.csrf_token to send X-Frappe-CSRF-Token on POST calls.
+    context.csrf_token = get_csrf_token()
     return context
