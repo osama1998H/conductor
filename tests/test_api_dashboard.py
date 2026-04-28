@@ -108,3 +108,56 @@ def test_get_state_rejects_anonymous(monkeypatch):
     with _as_roles(), patch.object(frappe, "has_permission", return_value=False):
         with pytest.raises(frappe.PermissionError):
             dashboard.get_state()
+
+
+@pytest.mark.skipif(not _has_site(), reason="needs Frappe site context")
+def test_get_job_returns_full_detail():
+    frappe.get_doc({
+        "doctype": "Conductor Job", "name": "jX", "job_id": "jX",
+        "queue": "default", "method": "x.y", "status": "FAILED",
+        "last_error_type": "ValueError", "last_error_message": "boom",
+        "last_traceback": "Traceback…\n  File \"x.py\"\n",
+    }).insert(ignore_permissions=True)
+    frappe.db.commit()
+
+    with _as_roles("Conductor Operator"):
+        result = dashboard.get_job("jX")
+    assert result["job_id"] == "jX"
+    assert result["last_traceback"].startswith("Traceback")
+    assert "runs" in result  # Conductor Job Run rows
+
+
+def test_retry_job_requires_operator(monkeypatch):
+    from frappe.types.frappedict import _dict
+    monkeypatch.setattr(frappe.local, "flags", _dict(in_test=False), raising=False)
+    with _as_roles(), patch.object(frappe, "has_permission", return_value=False):
+        with pytest.raises(frappe.PermissionError):
+            dashboard.retry_job("jX")
+
+
+@pytest.mark.skipif(not _has_site(), reason="needs Frappe site context")
+def test_retry_job_calls_enqueue(monkeypatch):
+    """retry_job re-dispatches via conductor.enqueue with the original method/kwargs."""
+    captured = {}
+
+    def fake_enqueue(method, **kwargs):
+        captured["method"] = method
+        captured["kwargs"] = kwargs
+        return "new-job-id"
+
+    monkeypatch.setattr(dashboard, "_enqueue_for_retry", fake_enqueue)
+    with _as_roles("Conductor Operator"):
+        new_id = dashboard.retry_job("jX")
+    assert new_id == "new-job-id"
+    assert captured["method"] == "x.y"
+
+
+def test_cancel_job_calls_cancellation(monkeypatch):
+    from conductor import cancellation as cancel_mod
+    from frappe.types.frappedict import _dict
+    monkeypatch.setattr(frappe.local, "flags", _dict(in_test=False), raising=False)
+    with _as_roles("Conductor Operator"), \
+         patch.object(cancel_mod, "cancel", return_value=True) as mock_cancel:
+        result = dashboard.cancel_job("jX")
+    mock_cancel.assert_called_once_with("jX")
+    assert result is True

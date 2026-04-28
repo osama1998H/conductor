@@ -24,6 +24,8 @@ from conductor.client import get_redis
 from conductor.config import load_config
 from conductor.streams import stream_key
 from conductor.scheduled import scheduled_redis_key
+from conductor import cancellation as _cancellation
+from conductor.serialization import loads as _msgpack_loads
 
 
 def _require_read() -> None:
@@ -125,3 +127,59 @@ def get_state() -> dict[str, Any]:
         "config": {"poll_interval_ms": _poll_interval_ms()},
         "ts": int(time.time()),
     }
+
+
+def _decode_b64_msgpack(b64: str) -> Any:
+    if not b64:
+        return None
+    import base64
+    return _msgpack_loads(base64.b64decode(b64.encode("ascii")))
+
+
+@frappe.whitelist()
+def get_job(job_id: str) -> dict[str, Any]:
+    _require_read()
+    if not frappe.db.exists("Conductor Job", job_id):
+        raise frappe.DoesNotExistError("Job not found")
+
+    job = frappe.get_doc("Conductor Job", job_id).as_dict()
+    job["args_decoded"] = _decode_b64_msgpack(job.get("args"))
+    job["kwargs_decoded"] = _decode_b64_msgpack(job.get("kwargs"))
+    job["runs"] = frappe.get_all(
+        "Conductor Job Run",
+        filters={"job": job_id},
+        fields=["attempt_number", "worker_id", "started_at", "finished_at",
+                "duration_ms", "status", "error_type", "error_message",
+                "traceback", "trace_id", "span_id", "sentry_event_id", "sentry_url"],
+        order_by="attempt_number asc",
+    )
+    return job
+
+
+def _enqueue_for_retry(method: str, **kwargs):
+    """Indirection so tests can monkeypatch."""
+    from conductor.dispatcher import enqueue
+    return enqueue(method, **kwargs)
+
+
+@frappe.whitelist()
+def retry_job(job_id: str) -> str:
+    _require_read()
+    if not (frappe.has_permission("Conductor Job", "write")
+            or "Conductor Operator" in frappe.get_roles()):
+        raise frappe.PermissionError("Not permitted")
+    if not frappe.db.exists("Conductor Job", job_id):
+        raise frappe.DoesNotExistError("Job not found")
+
+    job = frappe.get_doc("Conductor Job", job_id)
+    job_kwargs = _decode_b64_msgpack(job.kwargs) or {}
+    return _enqueue_for_retry(job.method, queue=job.queue, **job_kwargs)
+
+
+@frappe.whitelist()
+def cancel_job(job_id: str) -> bool:
+    _require_read()
+    if not (frappe.has_permission("Conductor Job", "write")
+            or "Conductor Operator" in frappe.get_roles()):
+        raise frappe.PermissionError("Not permitted")
+    return _cancellation.cancel(job_id)
