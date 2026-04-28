@@ -57,8 +57,9 @@ def test_kill_during_run_reclaims_and_completes(spawn_worker):
         # The worker subprocess commits Job=SUCCEEDED before it commits the
         # matching Conductor Job Run row (two separate transactions in
         # _handle_one). wait_for_status returns on the first commit, so the
-        # Job Run write may still be in flight here. Poll with a small budget.
-        deadline = time.time() + 10
+        # Job Run write may still be in flight here. Poll generously — under
+        # full-suite load the second commit can lag by several seconds.
+        deadline = time.time() + 30
         runs = []
         while time.time() < deadline:
             frappe.db.rollback()

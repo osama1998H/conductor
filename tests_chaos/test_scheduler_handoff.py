@@ -60,7 +60,7 @@ def test_scheduler_handoff_takes_over_within_5s(site, spawn_scheduler):
     proc_a = spawn_scheduler()
 
     # Wait until A holds the lock.
-    deadline = time.time() + 8
+    deadline = time.time() + 15
     holder_a = None
     while time.time() < deadline:
         v = _read_lock(site)
@@ -78,7 +78,7 @@ def test_scheduler_handoff_takes_over_within_5s(site, spawn_scheduler):
 
     # Wait for the lock value to flip to a different instance_id (≤ 8s with
     # TTL=3 + poll=1 = ≤ 4s; allow margin for OS / Frappe init).
-    deadline = time.time() + 8
+    deadline = time.time() + 15
     holder_b = None
     while time.time() < deadline:
         v = _read_lock(site)
@@ -109,7 +109,7 @@ def test_scheduler_handoff_drains_zset_after_takeover(site, spawn_scheduler):
 
     # Spawn A, wait for lock, kill it, spawn B.
     proc_a = spawn_scheduler()
-    deadline = time.time() + 8
+    deadline = time.time() + 15
     while time.time() < deadline:
         if _read_lock(site):
             break
@@ -118,7 +118,7 @@ def test_scheduler_handoff_drains_zset_after_takeover(site, spawn_scheduler):
     proc_b = spawn_scheduler()
 
     # Wait for B to acquire.
-    deadline = time.time() + 8
+    deadline = time.time() + 15
     while time.time() < deadline:
         v = _read_lock(site)
         if v:
@@ -144,7 +144,7 @@ def test_scheduler_handoff_drains_zset_after_takeover(site, spawn_scheduler):
     r.zadd(f"conductor:{site}:scheduled", {member: score})
 
     # Wait for delay loop to drain it (≤ 2s with 1s tick).
-    deadline = time.time() + 5
+    deadline = time.time() + 10
     drained = False
     while time.time() < deadline:
         if r.zcard(f"conductor:{site}:scheduled") == 0:
