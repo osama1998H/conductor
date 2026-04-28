@@ -19,7 +19,7 @@ from conductor.config import load_config
 from conductor.decorator import JobMetadata, get_metadata
 from conductor.idempotency import acquire_idem_lock
 from conductor.logging import get_logger
-from conductor.messages import JobMessage, encode
+from conductor.messages import JobMessage, emit_job_event, encode
 from conductor.otel import get_tracer, inject_traceparent, setup_otel
 from conductor.retry import RetryPolicy
 from conductor.streams import ensure_consumer_group, stream_key
@@ -220,10 +220,11 @@ def enqueue(
         frappe.db.set_value("Conductor Job", doc.name, "redis_msg_id", msg_id_str, update_modified=False)
         frappe.db.commit()
 
-        frappe.publish_realtime(
-            "conductor:job_queued",
-            {"job_id": job_id, "queue": resolved_queue, "method": method},
-            after_commit=False,
+        emit_job_event(
+            job_id,
+            "QUEUED",
+            queue=resolved_queue,
+            method=method,
         )
         log.info("job_enqueued", job_id=job_id, queue=resolved_queue, method=method)
 
