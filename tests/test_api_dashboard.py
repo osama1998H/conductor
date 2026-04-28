@@ -342,3 +342,15 @@ def test_get_worker_returns_detail_and_recent_jobs():
     assert result["name"] == "w1"
     assert any(j["job_id"] == "wjob1" for j in result["recent_jobs"])
     assert "heartbeat_age_seconds" in result
+
+
+@pytest.mark.skipif(not _has_site(), reason="needs Frappe site context")
+def test_get_state_respects_site_config_poll_interval(monkeypatch):
+    """get_state honors site_config.json conductor.dashboard_poll_interval_ms override."""
+    monkeypatch.setattr(dashboard, "_redis_queue_depth", lambda *a, **k: 0)
+    monkeypatch.setattr(dashboard, "_redis_scheduled_count", lambda *a, **k: 0)
+    monkeypatch.setattr(frappe.local, "conf",
+                        {"conductor": {"dashboard_poll_interval_ms": 5000}})
+    with _as_roles("Conductor Operator"):
+        state = dashboard.get_state()
+    assert state["config"]["poll_interval_ms"] == 5000
