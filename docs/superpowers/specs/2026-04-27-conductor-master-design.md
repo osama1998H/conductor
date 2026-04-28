@@ -109,7 +109,10 @@ Each phase below is shippable on its own and builds on the previous. **Each phas
 ### Phase 3 — Dashboard
 
 **Ships:**
-- A custom Frappe page (single-file Vue 3 SFC, embedded as a Frappe Page DocType) with sections:
+- A custom Frappe page (single-file Vue 3 SFC) with sections:
+
+> **Phase 3 refinement (2026-04-28):** Implemented as a `www/conductor-dashboard.html` route built from a standalone vite project at `apps/conductor/dashboard/` (HRMS-roster pattern), not as a Frappe Page DocType. The `www/` route is the proven Vue 3 SFC pattern in this Frappe 15.106.0 bench. See [Phase 3 spec](2026-04-28-conductor-phase3-dashboard-design.md) §2 #3 for full reasoning.
+
   - **Overview** — queue depths (live), throughput (last 1h/24h), error rate, DLQ counts.
   - **Live feed** — streaming list of recent jobs with status badges; click → drill.
   - **Job detail** — timeline of attempts, args/kwargs (pretty-printed), traceback, OTel trace ID copy/link, Sentry link if present.
@@ -416,7 +419,7 @@ What every later phase can rely on:
 | Idempotency / execution lock semantics | Phase 1 | Phase 1 |
 | Delay drainer behavior (in-worker → scheduler) | Phase 1 → Phase 2 | Phase 2 |
 | `bench conductor scheduler` singleton + reaper | Phase 2 | Phase 2 |
-| Real-time dashboard events (`conductor:*`) | Phase 3 | Phase 3 |
+| Real-time dashboard events: per-job `conductor:job:{id}` events with `doctype="Conductor Job"`, `docname=job_id` for room scoping; aggregates use polling (see [Phase 3 spec](2026-04-28-conductor-phase3-dashboard-design.md) §8 + §8.6.1). Existing global `conductor:job_queued` is **replaced** (breaking change). | Phase 3 | Phase 3 |
 | OTel exporter + metrics names (§Phase 4) | Phase 4 | Phase 4 |
 | Workflow definition + advancer | Phase 5 | Phase 5 |
 | Pool workers + per-tenant rate limits | Phase 6 | Phase 6 |
@@ -462,3 +465,4 @@ For every phase 0…6:
 | Date | Change | Author |
 |---|---|---|
 | 2026-04-27 | Initial master design. | osama.m@aau.iq |
+| 2026-04-28 | Phase 3 footnotes: UI delivery refined to `www/` route + standalone vite project; realtime event family settled as `conductor:job:{id}` with `doctype`/`docname` room scoping. | osama.m@aau.iq |
