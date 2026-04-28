@@ -10,14 +10,17 @@ const props = defineProps({ status: String });
 const tone = computed(() => {
   switch (props.status) {
     case "SUCCEEDED":       return "green";
-    case "RUNNING":         return "blue";
+    case "RUNNING":
+    case "ALIVE":           return "blue";
     case "QUEUED":
     case "SCHEDULED_RETRY": return "yellow";
     case "FAILED":
     case "DLQ":
     case "TIMED_OUT":
-    case "DISPATCH_FAILED": return "red";
-    case "CANCELLED":       return "grey";
+    case "DISPATCH_FAILED":
+    case "STALE":           return "red";
+    case "CANCELLED":
+    case "GONE":            return "grey";
     default:                return "grey";
   }
 });
