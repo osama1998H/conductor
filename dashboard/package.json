@@ -1,0 +1,18 @@
+{
+  "name": "conductor-dashboard",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build --base=/assets/conductor/dashboard/ && yarn copy-html-entry",
+    "copy-html-entry": "cp ../conductor/public/dashboard/index.html ../conductor/www/conductor-dashboard.html"
+  },
+  "dependencies": {
+    "@vitejs/plugin-vue": "^4.4.0",
+    "frappe-ui": "0.1.105",
+    "vite": "^5.4.10",
+    "vue": "^3.5.12",
+    "vue-router": "^4.3.2"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "name": "conductor",
+  "private": true,
+  "scripts": {
+    "build": "cd dashboard && yarn install --frozen-lockfile && yarn build"
+  }
+}
