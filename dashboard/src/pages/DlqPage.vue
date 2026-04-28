@@ -108,6 +108,8 @@ import { ref, reactive, computed, watch, toRefs } from "vue";
 import { useRouter } from "vue-router";
 import { api, getList } from "../api";
 import { useUserRoles } from "../stores/useUserRoles";
+import { confirm } from "../stores/useConfirm";
+import { toast } from "../stores/useToast";
 import StatusBadge from "../components/StatusBadge.vue";
 import JsonViewer from "../components/JsonViewer.vue";
 import EditAndRetryModal from "../components/EditAndRetryModal.vue";
@@ -165,8 +167,15 @@ const currentSafe = computed(() => {
 
 async function onRetry() {
   const names = [...selected.value];
-  if (!confirm(`Retry ${names.length} entries?`)) return;
-  await api.dlqRetry(names);
+  if (!(await confirm(`Retry ${names.length} ${names.length === 1 ? "entry" : "entries"} as-is?`,
+                       { title: "Retry DLQ entries", confirmText: "Retry" }))) return;
+  try {
+    await api.dlqRetry(names);
+    toast(`${names.length} ${names.length === 1 ? "entry" : "entries"} retried`, "success");
+  } catch (e) {
+    toast(`Retry failed: ${e.message}`, "error");
+    return;
+  }
   clearSelection();
   reload();
   if (entry_name.value) detailEntry.value = await api.getDlqEntry(entry_name.value);
@@ -174,8 +183,15 @@ async function onRetry() {
 
 async function onDiscard() {
   const names = [...selected.value];
-  if (!confirm(`Discard ${names.length} entries? This cannot be undone.`)) return;
-  await api.dlqDiscard(names);
+  if (!(await confirm(`Discard ${names.length} ${names.length === 1 ? "entry" : "entries"}? This cannot be undone.`,
+                       { title: "Discard DLQ entries", confirmText: "Discard", danger: true }))) return;
+  try {
+    await api.dlqDiscard(names);
+    toast(`${names.length} ${names.length === 1 ? "entry" : "entries"} discarded`, "success");
+  } catch (e) {
+    toast(`Discard failed: ${e.message}`, "error");
+    return;
+  }
   clearSelection();
   reload();
 }
@@ -184,7 +200,7 @@ async function onOpenEdit() {
   const [name] = selected.value;
   const entry = await api.getDlqEntry(name);
   if (!entry.is_json_safe) {
-    alert("Payload is not JSON-safe; edit-and-retry not available.");
+    toast("Payload is not JSON-safe; edit-and-retry not available.", "warning");
     return;
   }
   editing.value = {
@@ -197,22 +213,36 @@ async function onOpenEdit() {
 // Single-entry actions from the detail pane
 
 async function onRetrySingle() {
-  if (!confirm(`Retry ${entry_name.value}?`)) return;
-  await api.dlqRetry([entry_name.value]);
+  if (!(await confirm(`Retry this entry as-is?`,
+                       { title: "Retry DLQ entry", confirmText: "Retry" }))) return;
+  try {
+    await api.dlqRetry([entry_name.value]);
+    toast("Entry retried", "success");
+  } catch (e) {
+    toast(`Retry failed: ${e.message}`, "error");
+    return;
+  }
   reload();
   detailEntry.value = await api.getDlqEntry(entry_name.value);
 }
 
 async function onDiscardSingle() {
-  if (!confirm(`Discard ${entry_name.value}? This cannot be undone.`)) return;
-  await api.dlqDiscard([entry_name.value]);
+  if (!(await confirm(`Discard this entry? This cannot be undone.`,
+                       { title: "Discard DLQ entry", confirmText: "Discard", danger: true }))) return;
+  try {
+    await api.dlqDiscard([entry_name.value]);
+    toast("Entry discarded", "success");
+  } catch (e) {
+    toast(`Discard failed: ${e.message}`, "error");
+    return;
+  }
   reload();
   router.push({ path: "/dlq" });
 }
 
 async function onOpenEditSingle() {
   if (!detailEntry.value?.is_json_safe) {
-    alert("Payload is not JSON-safe; edit-and-retry not available.");
+    toast("Payload is not JSON-safe; edit-and-retry not available.", "warning");
     return;
   }
   editing.value = {
@@ -223,7 +253,7 @@ async function onOpenEditSingle() {
 }
 
 async function onEditSaved(newId) {
-  alert(`Re-enqueued as ${newId}`);
+  toast(`Re-enqueued as ${String(newId).slice(0, 8)}…`, "success");
   editing.value = null;
   clearSelection();
   reload();

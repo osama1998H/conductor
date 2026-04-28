@@ -109,6 +109,8 @@ import { ref, reactive, watch, toRefs } from "vue";
 import { useRouter } from "vue-router";
 import { api, getList } from "../api";
 import { useUserRoles } from "../stores/useUserRoles";
+import { confirm } from "../stores/useConfirm";
+import { toast } from "../stores/useToast";
 import StatusBadge from "../components/StatusBadge.vue";
 import MiniCalendar from "../components/MiniCalendar.vue";
 
@@ -178,11 +180,16 @@ async function loadDetail(n) {
 watch(name, loadDetail, { immediate: true });
 
 async function onRunNow(n) {
-  if (!confirm(`Run ${n} now?`)) return;
-  const newId = await api.scheduleRunNow(n);
-  alert(`Dispatched as ${newId}`);
-  reload();
-  if (name.value === n) loadDetail(n);
+  if (!(await confirm(`Run schedule "${n}" now? This dispatches immediately and does not affect the cron cadence.`,
+                       { title: "Run schedule now", confirmText: "Dispatch" }))) return;
+  try {
+    const newId = await api.scheduleRunNow(n);
+    toast(`Dispatched as ${newId.slice(0, 8)}…`, "success");
+    reload();
+    if (name.value === n) loadDetail(n);
+  } catch (e) {
+    toast(`Run-now failed: ${e.message}`, "error");
+  }
 }
 
 async function onToggleEnabled(row) {

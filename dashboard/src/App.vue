@@ -9,10 +9,14 @@
       <router-link to="/workers">Workers</router-link>
     </nav>
     <main><router-view /></main>
+    <ConfirmDialog />
+    <ToastHost />
   </div>
 </template>
 
 <script setup>
+import ConfirmDialog from "./components/ConfirmDialog.vue";
+import ToastHost from "./components/ToastHost.vue";
 </script>
 
 <style scoped>

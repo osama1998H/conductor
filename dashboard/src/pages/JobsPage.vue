@@ -121,6 +121,8 @@ import { useRouter } from "vue-router";
 import { api, getList } from "../api";
 import { useDetailSubscription } from "../stores/useDetailSubscription";
 import { useUserRoles } from "../stores/useUserRoles";
+import { confirm } from "../stores/useConfirm";
+import { toast } from "../stores/useToast";
 import StatusBadge from "../components/StatusBadge.vue";
 import JsonViewer from "../components/JsonViewer.vue";
 
@@ -177,15 +179,23 @@ const canCancel = computed(() =>
 );
 
 async function onRetry() {
-  if (!confirm(`Retry ${job_id.value}?`)) return;
-  const newId = await api.retryJob(job_id.value);
-  alert(`Re-enqueued as ${newId}`);
-  reload();
+  if (!(await confirm(`Retry job ${job_id.value.slice(0, 8)}…?`,
+                       { title: "Retry job", confirmText: "Retry" }))) return;
+  try {
+    const newId = await api.retryJob(job_id.value);
+    toast(`Re-enqueued as ${newId.slice(0, 8)}…`, "success");
+    reload();
+  } catch (e) {
+    toast(`Retry failed: ${e.message}`, "error");
+  }
 }
 
 async function onCancel() {
-  if (!confirm(`Cancel ${job_id.value}?`)) return;
+  if (!(await confirm(`Cancel job ${job_id.value.slice(0, 8)}…?`,
+                       { title: "Cancel job", confirmText: "Cancel job",
+                         cancelText: "Keep running", danger: true }))) return;
   await api.cancelJob(job_id.value);
+  toast("Job cancellation requested", "info");
   refetchDetail();
 }
 </script>
