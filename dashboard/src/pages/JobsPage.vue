@@ -7,7 +7,7 @@
           <option v-for="s in STATUSES" :key="s" :value="s">{{ s }}</option>
         </select>
         <input v-model="filters.method" placeholder="method contains…" />
-        <input v-model="filters.queue"  placeholder="queue" />
+        <input v-model="filters.queue" placeholder="queue" />
         <button @click="reload">Refresh</button>
       </div>
 
@@ -22,13 +22,11 @@
           </tr>
         </thead>
         <tbody>
-          <tr
-            v-for="row in rows"
-            :key="row.job_id"
-            :class="{ active: row.job_id === job_id }"
-            @click="open(row.job_id)"
-          >
-            <td><StatusBadge :status="row.status" /></td>
+          <tr v-for="row in rows" :key="row.job_id" :class="{ active: row.job_id === job_id }"
+            @click="open(row.job_id)">
+            <td>
+              <StatusBadge :status="row.status" />
+            </td>
             <td class="mono">{{ row.method }}</td>
             <td>{{ row.queue }}</td>
             <td>{{ row.attempt }}</td>
@@ -52,9 +50,10 @@
 
         <nav class="subtabs">
           <button :class="{ active: subtab === 'overview' }" @click="subtab = 'overview'">Overview</button>
-          <button :class="{ active: subtab === 'runs' }"     @click="subtab = 'runs'">Runs ({{ detail.runs?.length || 0 }})</button>
-          <button :class="{ active: subtab === 'args' }"     @click="subtab = 'args'">Args</button>
-          <button :class="{ active: subtab === 'trace' }"    @click="subtab = 'trace'">Trace</button>
+          <button :class="{ active: subtab === 'runs' }" @click="subtab = 'runs'">Runs ({{ detail.runs?.length || 0
+            }})</button>
+          <button :class="{ active: subtab === 'args' }" @click="subtab = 'args'">Args</button>
+          <button :class="{ active: subtab === 'trace' }" @click="subtab = 'trace'">Trace</button>
         </nav>
 
         <section v-if="subtab === 'overview'">
@@ -66,7 +65,7 @@
             <pre class="tb">{{ detail.last_traceback }}</pre>
           </details>
           <div class="actions">
-            <button @click="onRetry"  :disabled="!canRetry">Retry</button>
+            <button @click="onRetry" :disabled="!canRetry">Retry</button>
             <button @click="onCancel" :disabled="!canCancel">Cancel</button>
           </div>
         </section>
@@ -86,7 +85,9 @@
             <tbody>
               <tr v-for="r in (detail.runs || [])" :key="r.attempt_number">
                 <td>{{ r.attempt_number }}</td>
-                <td><StatusBadge :status="r.status" /></td>
+                <td>
+                  <StatusBadge :status="r.status" />
+                </td>
                 <td class="ts">{{ r.started_at }}</td>
                 <td class="ts">{{ r.finished_at }}</td>
                 <td>{{ r.duration_ms }}ms</td>
@@ -132,13 +133,13 @@ const STATUSES = [
 ];
 
 const filters = reactive({ status: "", method: "", queue: "" });
-const rows    = ref([]);
-const subtab  = ref("overview");
+const rows = ref([]);
+const subtab = ref("overview");
 
 async function reload() {
   const f = {};
   if (filters.status) f.status = filters.status;
-  if (filters.queue)  f.queue  = filters.queue;
+  if (filters.queue) f.queue = filters.queue;
   if (filters.method) f.method = ["like", `%${filters.method}%`];
   rows.value = await getList("Conductor Job", {
     fields: ["job_id", "method", "queue", "status", "attempt", "enqueued_at", "last_error_message"],
@@ -162,7 +163,7 @@ const { data: detail, refetch: refetchDetail } = useDetailSubscription(
   () => api.getJob(job_id.value),
 );
 
-const roles      = userRoles();
+const roles = userRoles();
 const isOperator = roles.includes("Conductor Operator") || roles.includes("System Manager");
 
 const canRetry = computed(() =>
@@ -190,39 +191,154 @@ async function onCancel() {
 </script>
 
 <style scoped>
-.jobs-page { display: flex; gap: 16px; height: calc(100vh - 100px); }
-.master    { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.detail    { flex: 1; min-width: 0; border-left: 1px solid #ddd; padding-left: 16px; overflow: auto; }
+.jobs-page {
+  display: flex;
+  gap: 16px;
+  height: calc(100vh - 100px);
+}
 
-.filters { display: flex; gap: 8px; margin-bottom: 12px; }
+.master {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.detail {
+  flex: 1;
+  min-width: 0;
+  border-left: 1px solid #ddd;
+  padding-left: 16px;
+  overflow: auto;
+}
+
+.filters {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
 .filters select,
-.filters input  { padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; }
+.filters input {
+  padding: 4px 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 13px;
+}
 
-.job-list                  { width: 100%; border-collapse: collapse; font-size: 12px; }
+.job-list {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
 .job-list th,
-.job-list td               { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; }
-.job-list tbody tr         { cursor: pointer; }
-.job-list tbody tr:hover   { background: #f8fafc; }
-.job-list tbody tr.active  { background: #e0e7ff; }
+.job-list td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid #eee;
+}
 
-.mono, code { font-family: ui-monospace, SFMono-Regular, monospace; }
-.ts         { font-size: 11px; color: #64748b; }
-.empty      { color: #94a3b8; padding: 12px; text-align: center; }
+.job-list tbody tr {
+  cursor: pointer;
+}
 
-header { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+.job-list tbody tr:hover {
+  background: #f8fafc;
+}
 
-.subtabs               { display: flex; gap: 4px; border-bottom: 1px solid #ddd; margin-bottom: 12px; }
-.subtabs button        { padding: 6px 10px; background: transparent; border: 0; border-bottom: 2px solid transparent; cursor: pointer; }
-.subtabs button.active { border-bottom-color: #2563eb; color: #2563eb; }
+.job-list tbody tr.active {
+  background: #e0e7ff;
+}
 
-.error { color: #991b1b; }
-.tb    { font-family: ui-monospace, monospace; font-size: 11px; background: #fee; padding: 8px; border-radius: 4px; max-height: 400px; overflow: auto; }
+.mono,
+code {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
 
-.actions            { margin-top: 16px; display: flex; gap: 8px; }
-.actions button          { padding: 6px 14px; background: #2563eb; color: white; border: 0; border-radius: 4px; cursor: pointer; }
-.actions button:disabled { background: #cbd5e1; cursor: not-allowed; }
+.ts {
+  font-size: 11px;
+  color: #64748b;
+}
 
-.runs        { width: 100%; border-collapse: collapse; font-size: 12px; }
+.empty {
+  color: #94a3b8;
+  padding: 12px;
+  text-align: center;
+}
+
+header {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.subtabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid #ddd;
+  margin-bottom: 12px;
+}
+
+.subtabs button {
+  padding: 6px 10px;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+}
+
+.subtabs button.active {
+  border-bottom-color: #2563eb;
+  color: #2563eb;
+}
+
+.error {
+  color: #991b1b;
+}
+
+.tb {
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  background: #fee;
+  padding: 8px;
+  border-radius: 4px;
+  max-height: 400px;
+  overflow: auto;
+}
+
+.actions {
+  margin-top: 16px;
+  display: flex;
+  gap: 8px;
+}
+
+.actions button {
+  padding: 6px 14px;
+  background: #2563eb;
+  color: white;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.actions button:disabled {
+  background: #cbd5e1;
+  cursor: not-allowed;
+}
+
+.runs {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
 .runs th,
-.runs td     { text-align: left; padding: 4px 8px; border-bottom: 1px solid #eee; }
+.runs td {
+  text-align: left;
+  padding: 4px 8px;
+  border-bottom: 1px solid #eee;
+}
 </style>
