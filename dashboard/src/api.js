@@ -1,16 +1,16 @@
-const BASE = "/api/method/conductor.api.dashboard";
+const DASHBOARD_PREFIX = "conductor.api.dashboard";
 
-async function call(endpoint, params = {}, method = "GET") {
-  const url = `${BASE}.${endpoint}`;
+async function callMethod(method, params = {}, httpMethod = "GET") {
+  const url = `/api/method/${method}`;
   const opts = {
-    method,
+    method: httpMethod,
     credentials: "include",
     headers: {
       "X-Frappe-CSRF-Token": window.frappe?.csrf_token || "token",
     },
   };
   let finalUrl = url;
-  if (method === "GET") {
+  if (httpMethod === "GET") {
     const qs = new URLSearchParams(params).toString();
     if (qs) finalUrl = `${url}?${qs}`;
   } else {
@@ -18,26 +18,30 @@ async function call(endpoint, params = {}, method = "GET") {
     opts.body = JSON.stringify(params);
   }
   const res = await fetch(finalUrl, opts);
-  if (!res.ok) throw new Error(`${endpoint}: ${res.status}`);
+  if (!res.ok) throw new Error(`${method}: ${res.status}`);
   const data = await res.json();
   return data.message;  // Frappe wraps responses in {message: ...}
 }
 
+function dashCall(endpoint, params = {}, httpMethod = "GET") {
+  return callMethod(`${DASHBOARD_PREFIX}.${endpoint}`, params, httpMethod);
+}
+
 export const api = {
-  getState:        () => call("get_state"),
-  getJob:          (job_id) => call("get_job", { job_id }),
-  retryJob:        (job_id) => call("retry_job", { job_id }, "POST"),
-  cancelJob:       (job_id) => call("cancel_job", { job_id }, "POST"),
-  getDlqEntry:     (name) => call("get_dlq_entry", { name }),
-  dlqRetry:        (entry_names) => call("dlq_retry", { entry_names }, "POST"),
-  dlqDiscard:      (entry_names) => call("dlq_discard", { entry_names }, "POST"),
+  getState:        () => dashCall("get_state"),
+  getJob:          (job_id) => dashCall("get_job", { job_id }),
+  retryJob:        (job_id) => dashCall("retry_job", { job_id }, "POST"),
+  cancelJob:       (job_id) => dashCall("cancel_job", { job_id }, "POST"),
+  getDlqEntry:     (name) => dashCall("get_dlq_entry", { name }),
+  dlqRetry:        (entry_names) => dashCall("dlq_retry", { entry_names }, "POST"),
+  dlqDiscard:      (entry_names) => dashCall("dlq_discard", { entry_names }, "POST"),
   dlqEditAndRetry: (name, args_json, kwargs_json) =>
-    call("dlq_edit_and_retry", { name, args_json, kwargs_json }, "POST"),
-  scheduleRunNow:     (name) => call("schedule_run_now", { name }, "POST"),
-  scheduleSetEnabled: (name, enabled) => call("schedule_set_enabled", { name, enabled }, "POST"),
+    dashCall("dlq_edit_and_retry", { name, args_json, kwargs_json }, "POST"),
+  scheduleRunNow:     (name) => dashCall("schedule_run_now", { name }, "POST"),
+  scheduleSetEnabled: (name, enabled) => dashCall("schedule_set_enabled", { name, enabled }, "POST"),
   getScheduleNextFires: (name, count = 10) =>
-    call("get_schedule_next_fires", { name, count }),
-  getWorker: (worker_id) => call("get_worker", { worker_id }),
+    dashCall("get_schedule_next_fires", { name, count }),
+  getWorker: (worker_id) => dashCall("get_worker", { worker_id }),
 };
 
 export function getList(doctype, opts = {}) {
@@ -49,7 +53,7 @@ export function getList(doctype, opts = {}) {
     limit_page_length: opts.limit || 50,
     limit_start: opts.start || 0,
   };
-  return call("../frappe.client.get_list", params);
+  return callMethod("frappe.client.get_list", params);
 }
 
 export function userRoles() {
