@@ -118,8 +118,9 @@
 <script setup>
 import { ref, reactive, computed, watch, toRefs } from "vue";
 import { useRouter } from "vue-router";
-import { api, getList, userRoles } from "../api";
+import { api, getList } from "../api";
 import { useDetailSubscription } from "../stores/useDetailSubscription";
+import { useUserRoles } from "../stores/useUserRoles";
 import StatusBadge from "../components/StatusBadge.vue";
 import JsonViewer from "../components/JsonViewer.vue";
 
@@ -163,8 +164,7 @@ const { data: detail, refetch: refetchDetail } = useDetailSubscription(
   () => api.getJob(job_id.value),
 );
 
-const roles = userRoles();
-const isOperator = roles.includes("Conductor Operator") || roles.includes("System Manager");
+const { isOperator } = useUserRoles();
 
 const canRetry = computed(() =>
   isOperator &&

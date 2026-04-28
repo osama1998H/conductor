@@ -107,7 +107,8 @@
 <script setup>
 import { ref, reactive, watch, toRefs } from "vue";
 import { useRouter } from "vue-router";
-import { api, getList, userRoles } from "../api";
+import { api, getList } from "../api";
+import { useUserRoles } from "../stores/useUserRoles";
 import StatusBadge from "../components/StatusBadge.vue";
 import MiniCalendar from "../components/MiniCalendar.vue";
 
@@ -122,9 +123,7 @@ const nextFires = ref([]);
 const recentRuns = ref([]);
 const lastJobStatus = ref("");
 
-const roles = userRoles();
-const isOperator = roles.includes("Conductor Operator") || roles.includes("System Manager");
-const isSysMgr = roles.includes("System Manager");
+const { isOperator, isSysMgr } = useUserRoles();
 
 async function reload() {
   const f = {};

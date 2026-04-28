@@ -106,7 +106,8 @@
 <script setup>
 import { ref, reactive, computed, watch, toRefs } from "vue";
 import { useRouter } from "vue-router";
-import { api, getList, userRoles } from "../api";
+import { api, getList } from "../api";
+import { useUserRoles } from "../stores/useUserRoles";
 import StatusBadge from "../components/StatusBadge.vue";
 import JsonViewer from "../components/JsonViewer.vue";
 import EditAndRetryModal from "../components/EditAndRetryModal.vue";
@@ -121,9 +122,7 @@ const selected = ref(new Set());
 const detailEntry = ref(null);
 const editing = ref(null);
 
-const roles = userRoles();
-const isOperator = roles.includes("Conductor Operator") || roles.includes("System Manager");
-const isSysMgr = roles.includes("System Manager");
+const { isOperator, isSysMgr } = useUserRoles();
 
 async function reload() {
   const f = {};
