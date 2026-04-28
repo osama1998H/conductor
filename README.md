@@ -72,7 +72,7 @@ with DB **2** forced.
 
 ## Status
 
-Phase 2 of 6. See `docs/superpowers/specs/2026-04-27-conductor-master-design.md`
+Phase 3 of 6. See `docs/superpowers/specs/2026-04-27-conductor-master-design.md`
 for the full roadmap.
 
 ## Operations (Phase 2+)
@@ -109,6 +109,47 @@ $ bench --site SITE conductor schedule run-now <name>
 Create / edit schedules in **Conductor Schedule** under the Conductor module. Required fields: `cron_expression`, `timezone` (defaults to UTC), `method` (dotted path), `queue`. Validation runs the cron expression through `croniter` on save; bad expressions are rejected with a Frappe validation error.
 
 Cron is at-least-once across scheduler crashes — if a scheduler dies between `conductor.enqueue(...)` and the `next_run_at` update, the next holder re-fires the schedule. Make your `method` idempotent if duplicate execution would corrupt state.
+
+## Dashboard (Phase 3)
+
+The Conductor dashboard is at `https://<your-site>/conductor-dashboard`. Six tabs:
+
+- **Overview** — number cards (queue depth, active workers, DLQ pending, schedules enabled) + horizontal bar charts.
+- **Live Feed** — chronological stream of recent jobs; click a row to drill into job detail.
+- **Jobs** — filterable list (queue, status, method); click → detail with status timeline, args/kwargs, traceback, and **Retry** / **Cancel** buttons.
+- **DLQ** — failed-after-retries jobs; multi-select for bulk retry / discard / edit-and-retry.
+- **Schedules** — list + run-now + enable/disable toggle + per-schedule mini calendar of upcoming fires.
+- **Workers** — observability of worker fleet: status, heartbeat age, currently executing, recent jobs.
+
+### Permissions
+
+- **System Manager**: full access.
+- **Conductor Operator**: read everything + retry / cancel / schedule run-now.
+- Destructive actions (DLQ discard, payload edit-and-retry, schedule enable/disable) are System Manager only.
+
+### Configuration
+
+In `site_config.json`:
+
+```json
+{
+  "conductor": {
+    "dashboard_poll_interval_ms": 2000
+  }
+}
+```
+
+The dashboard polls `conductor.api.dashboard.get_state` for aggregates at this interval (default 2000 ms; configurable per site for high-volume installations). Per-job realtime events deliver into the open detail view via Frappe's socketio (`doc:Conductor Job/{job_id}` rooms).
+
+### Build
+
+The dashboard is a Vue 3 SPA under `apps/conductor/dashboard/`. Build with:
+
+```bash
+cd apps/conductor/dashboard && yarn install && yarn build
+```
+
+Outputs hashed JS/CSS bundles to `apps/conductor/conductor/public/dashboard/` and copies the entry HTML to `apps/conductor/conductor/www/conductor-dashboard.html`. After a fresh build, run `bench --site <site> clear-cache` so Frappe picks up the new entry HTML.
 
 ## Contributing
 
