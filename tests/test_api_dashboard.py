@@ -161,3 +161,91 @@ def test_cancel_job_calls_cancellation(monkeypatch):
         result = dashboard.cancel_job("jX")
     mock_cancel.assert_called_once_with("jX")
     assert result is True
+
+
+def _seed_dlq_entry(name="dlq1", payload_args=None, payload_kwargs=None):
+    import base64
+    import json as json_mod
+    from conductor.serialization import dumps
+    args_b64 = base64.b64encode(dumps(payload_args or [])).decode("ascii")
+    kwargs_b64 = base64.b64encode(dumps(payload_kwargs or {})).decode("ascii")
+    payload = json_mod.dumps({
+        "args_b64": args_b64,
+        "kwargs_b64": kwargs_b64,
+        "name": "x.y",
+        "queue": "default",
+    })
+    frappe.get_doc({
+        "doctype": "Conductor DLQ Entry",
+        "name": name,
+        "queue": "default",
+        "status": "PENDING_REVIEW",
+        "attempts": 3,
+        "last_error_type": "ValueError",
+        "last_error_message": "boom",
+        "last_traceback": "...",
+        "payload": payload,
+    }).insert(ignore_permissions=True)
+    frappe.db.commit()
+
+
+@pytest.mark.skipif(not _has_site(), reason="needs Frappe site context")
+def test_get_dlq_entry_includes_json_safety_flag():
+    _seed_dlq_entry("dlq-safe", payload_kwargs={"a": 1, "b": "x"})
+    with _as_roles("Conductor Operator"):
+        entry = dashboard.get_dlq_entry("dlq-safe")
+    assert entry["is_json_safe"] is True
+
+
+@pytest.mark.skipif(not _has_site(), reason="needs Frappe site context")
+def test_get_dlq_entry_unsafe_payload():
+    from datetime import datetime
+    _seed_dlq_entry("dlq-unsafe", payload_kwargs={"ts": datetime.now()})
+    with _as_roles("Conductor Operator"):
+        entry = dashboard.get_dlq_entry("dlq-unsafe")
+    assert entry["is_json_safe"] is False
+
+
+@pytest.mark.skipif(not _has_site(), reason="needs Frappe site context")
+def test_dlq_retry_allowed_for_operator(monkeypatch):
+    _seed_dlq_entry("dlq-r1")
+    monkeypatch.setattr(dashboard, "_enqueue_for_retry", lambda m, **k: "new-id")
+    with _as_roles("Conductor Operator"):
+        result = dashboard.dlq_retry(["dlq-r1"])
+    assert result["retried"] == 1
+    assert frappe.db.get_value("Conductor DLQ Entry", "dlq-r1", "status") == "RETRIED"
+
+
+@pytest.mark.skipif(not _has_site(), reason="needs Frappe site context")
+def test_dlq_discard_rejects_operator():
+    _seed_dlq_entry("dlq-d1")
+    with _as_roles("Conductor Operator"):
+        with pytest.raises(frappe.PermissionError):
+            dashboard.dlq_discard(["dlq-d1"])
+
+
+@pytest.mark.skipif(not _has_site(), reason="needs Frappe site context")
+def test_dlq_discard_allowed_for_sysmgr():
+    _seed_dlq_entry("dlq-d2")
+    with _as_roles("System Manager"):
+        result = dashboard.dlq_discard(["dlq-d2"])
+    assert result["discarded"] == 1
+    assert frappe.db.get_value("Conductor DLQ Entry", "dlq-d2", "status") == "DISCARDED"
+
+
+@pytest.mark.skipif(not _has_site(), reason="needs Frappe site context")
+def test_dlq_edit_and_retry_rejects_unsafe_payload():
+    from datetime import datetime
+    _seed_dlq_entry("dlq-e1", payload_kwargs={"ts": datetime.now()})
+    with _as_roles("System Manager"):
+        with pytest.raises(frappe.ValidationError):
+            dashboard.dlq_edit_and_retry("dlq-e1", "[]", '{"a":1}')
+
+
+@pytest.mark.skipif(not _has_site(), reason="needs Frappe site context")
+def test_dlq_edit_and_retry_dispatches_safe_edit(monkeypatch):
+    _seed_dlq_entry("dlq-e2", payload_kwargs={"a": 1})
+    monkeypatch.setattr(dashboard, "_enqueue_for_retry", lambda m, **k: "new-id")
+    with _as_roles("System Manager"):
+        result = dashboard.dlq_edit_and_retry("dlq-e2", "[]", '{"a":99}')
+    assert result == "new-id"

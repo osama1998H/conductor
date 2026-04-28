@@ -20,6 +20,9 @@ from typing import Any
 
 import frappe
 
+import json as _json
+
+from conductor.api.json_safety import is_json_safe
 from conductor.client import get_redis
 from conductor.config import load_config
 from conductor.streams import stream_key
@@ -183,3 +186,105 @@ def cancel_job(job_id: str) -> bool:
             or "Conductor Operator" in frappe.get_roles()):
         raise frappe.PermissionError("Not permitted")
     return _cancellation.cancel(job_id)
+
+
+def _dlq_payload_decoded(payload_str: str) -> dict[str, Any]:
+    """Decode the JSON-stringified stream payload stored in the DLQ row."""
+    raw = _json.loads(payload_str or "{}")
+    args = _decode_b64_msgpack(raw.get("args_b64", "")) or []
+    kwargs = _decode_b64_msgpack(raw.get("kwargs_b64", "")) or {}
+    return {
+        "args": args,
+        "kwargs": kwargs,
+        "method": raw.get("name") or raw.get("method"),
+        "queue": raw.get("queue", "default"),
+    }
+
+
+@frappe.whitelist()
+def get_dlq_entry(name: str) -> dict[str, Any]:
+    _require_read()
+    if not frappe.db.exists("Conductor DLQ Entry", name):
+        raise frappe.DoesNotExistError("DLQ entry not found")
+    entry = frappe.get_doc("Conductor DLQ Entry", name).as_dict()
+    decoded = _dlq_payload_decoded(entry.get("payload", ""))
+    entry["payload_decoded"] = decoded
+    entry["is_json_safe"] = is_json_safe(decoded["args"]) and is_json_safe(decoded["kwargs"])
+    return entry
+
+
+@frappe.whitelist()
+def dlq_retry(entry_names: list[str] | str) -> dict[str, Any]:
+    _require_read()
+    if not (frappe.has_permission("Conductor DLQ Entry", "write")
+            or "Conductor Operator" in frappe.get_roles()):
+        raise frappe.PermissionError("Not permitted")
+
+    if isinstance(entry_names, str):
+        entry_names = _json.loads(entry_names)
+
+    retried = 0
+    for name in entry_names:
+        entry = frappe.get_doc("Conductor DLQ Entry", name)
+        decoded = _dlq_payload_decoded(entry.payload)
+        _enqueue_for_retry(
+            decoded["method"],
+            queue=decoded["queue"],
+            **decoded["kwargs"],
+        )
+        frappe.db.set_value("Conductor DLQ Entry", name, {
+            "status": "RETRIED",
+            "reviewed_by": frappe.session.user,
+            "reviewed_at": frappe.utils.now_datetime(),
+        })
+        retried += 1
+
+    frappe.db.commit()
+    return {"retried": retried}
+
+
+@frappe.whitelist()
+def dlq_discard(entry_names: list[str] | str) -> dict[str, Any]:
+    _require_destructive()
+    if isinstance(entry_names, str):
+        entry_names = _json.loads(entry_names)
+    discarded = 0
+    for name in entry_names:
+        frappe.db.set_value("Conductor DLQ Entry", name, {
+            "status": "DISCARDED",
+            "reviewed_by": frappe.session.user,
+            "reviewed_at": frappe.utils.now_datetime(),
+        })
+        discarded += 1
+    frappe.db.commit()
+    return {"discarded": discarded}
+
+
+@frappe.whitelist()
+def dlq_edit_and_retry(name: str, args_json: str, kwargs_json: str) -> str:
+    _require_destructive()
+    entry = frappe.get_doc("Conductor DLQ Entry", name)
+    decoded = _dlq_payload_decoded(entry.payload)
+    if not (is_json_safe(decoded["args"]) and is_json_safe(decoded["kwargs"])):
+        raise frappe.ValidationError(
+            "Original payload contains non-JSON-native types; "
+            "edit-and-retry not available."
+        )
+
+    new_args = _json.loads(args_json)
+    new_kwargs = _json.loads(kwargs_json)
+    if not (is_json_safe(new_args) and is_json_safe(new_kwargs)):
+        raise frappe.ValidationError("Edited payload contains non-JSON-native types")
+
+    new_id = _enqueue_for_retry(
+        decoded["method"],
+        queue=decoded["queue"],
+        **new_kwargs,
+    )
+    frappe.db.set_value("Conductor DLQ Entry", name, {
+        "status": "RETRIED",
+        "reviewed_by": frappe.session.user,
+        "reviewed_at": frappe.utils.now_datetime(),
+    })
+    frappe.db.commit()
+    return new_id
