@@ -54,14 +54,20 @@ def test_kill_during_run_reclaims_and_completes(spawn_worker):
         final = wait_for_status(job_id, "SUCCEEDED", timeout=180)
         assert final == "SUCCEEDED", f"expected SUCCEEDED, got {final}"
 
-        # Refresh DB snapshot before querying child rows. The worker subprocess
-        # commits the Conductor Job Run row in a separate transaction; without
-        # a rollback here, the test's connection may still see its prior
-        # snapshot (resulting in an empty get_all result).
-        frappe.db.rollback()
-        runs = frappe.get_all(
-            "Conductor Job Run", filters={"job": job_id}, fields=["name", "status"]
-        )
+        # The worker subprocess commits Job=SUCCEEDED before it commits the
+        # matching Conductor Job Run row (two separate transactions in
+        # _handle_one). wait_for_status returns on the first commit, so the
+        # Job Run write may still be in flight here. Poll with a small budget.
+        deadline = time.time() + 10
+        runs = []
+        while time.time() < deadline:
+            frappe.db.rollback()
+            runs = frappe.get_all(
+                "Conductor Job Run", filters={"job": job_id}, fields=["name", "status"]
+            )
+            if any(r.status == "SUCCEEDED" for r in runs):
+                break
+            time.sleep(0.2)
         assert any(r.status == "SUCCEEDED" for r in runs), runs
 
         for r in runs:
