@@ -16,6 +16,14 @@ def boom(**kwargs: Any) -> None:
     raise RuntimeError(f"intentional failure (kwargs={kwargs!r})")
 
 
+def sleep(seconds: float = 0.1, **kwargs: Any) -> None:
+    """Sleep for `seconds`, then return. Used by the Phase 6 rate-limit chaos
+    test: `time.sleep` cannot be invoked directly because `frappe.get_attr`
+    treats the first dotted segment as an app name."""
+    import time
+    time.sleep(seconds)
+
+
 def slow_chaos(**kwargs: Any) -> dict:
     """Sleeps long enough for a kill -9 to interrupt mid-execution.
 
