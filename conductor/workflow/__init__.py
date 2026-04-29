@@ -3,6 +3,7 @@
 Spec: docs/superpowers/specs/2026-04-29-conductor-phase5-workflows-design.md
 """
 
+from conductor.workflow.cancellation import cancel_workflow_run
 from conductor.workflow.decorator import (
     Step,
     WorkflowDefinitionError,
@@ -14,6 +15,7 @@ __all__ = [
     "Step",
     "WorkflowDefinitionError",
     "WorkflowNotFoundError",
+    "cancel_workflow_run",
     "run_workflow",
     "workflow",
 ]

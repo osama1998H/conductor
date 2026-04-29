@@ -66,3 +66,7 @@ def cancel(job_id: str) -> bool:
     emit_job_event(job_id, "CANCELLED")
     log.info("job_cancelled", job_id=job_id, prior_status=current)
     return True
+
+
+# Alias for workflow cancellation to reference as cancel_job
+cancel_job = cancel
