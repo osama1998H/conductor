@@ -72,3 +72,70 @@ def test_dlq_list_filter_by_status():
         ])
     assert result.exit_code == 0
     assert captured["filters"] == {"status": "RETRIED"}
+
+
+def test_dlq_retry_re_enqueues_pending_rows():
+    from conductor.commands.dlq import dlq_group
+    runner = CliRunner()
+    rows = [
+        {
+            "name": "DLQE-001", "job": "job-A", "queue": "default",
+            "method": "conductor.demo.echo", "args_b64": "", "kwargs_b64": "",
+            "status": "PENDING_REVIEW",
+        },
+    ]
+    enqueued: list[tuple[str, str, dict]] = []
+    flipped: list[tuple[str, str, dict]] = []
+    def fake_enqueue(method, *, queue, **kwargs):
+        enqueued.append((method, queue, dict(kwargs)))
+        return "new-job-id"
+    def fake_flip(name, payload):
+        flipped.append((name, payload["status"], dict(payload)))
+    with patch("conductor.commands.dlq._fetch_pending_rows", return_value=rows), \
+         patch("conductor.commands.dlq._enqueue_from_dlq_row", side_effect=fake_enqueue), \
+         patch("conductor.commands.dlq._mark_dlq_row", side_effect=fake_flip), \
+         patch("conductor.commands.dlq._connect_to_site"), \
+         patch("conductor.commands.dlq._disconnect"):
+        result = runner.invoke(dlq_group, ["retry", "--site", "frappe.localhost"])
+    assert result.exit_code == 0, result.output
+    assert enqueued == [("conductor.demo.echo", "default", {})]
+    # Tolerant payload assertion: status RETRIED, reviewed_by present, reviewed_at present.
+    assert len(flipped) == 1
+    assert flipped[0][0] == "DLQE-001"
+    assert flipped[0][1] == "RETRIED"
+    payload = flipped[0][2]
+    assert payload["status"] == "RETRIED"
+    assert "reviewed_by" in payload
+    assert "reviewed_at" in payload
+
+
+def test_dlq_retry_skips_non_pending_rows():
+    from conductor.commands.dlq import dlq_group
+    runner = CliRunner()
+    enq_called = []
+    with patch("conductor.commands.dlq._fetch_pending_rows", return_value=[]), \
+         patch("conductor.commands.dlq._enqueue_from_dlq_row",
+               side_effect=lambda *a, **k: enq_called.append(True) or "x"), \
+         patch("conductor.commands.dlq._connect_to_site"), \
+         patch("conductor.commands.dlq._disconnect"):
+        result = runner.invoke(dlq_group, ["retry", "--site", "frappe.localhost"])
+    assert result.exit_code == 0
+    assert enq_called == []
+
+
+def test_dlq_discard_marks_row():
+    from conductor.commands.dlq import dlq_group
+    runner = CliRunner()
+    rows = [{
+        "name": "DLQE-001", "job": "job-A", "queue": "default",
+        "method": "x", "status": "PENDING_REVIEW",
+    }]
+    flipped = []
+    with patch("conductor.commands.dlq._fetch_pending_rows", return_value=rows), \
+         patch("conductor.commands.dlq._mark_dlq_row",
+               side_effect=lambda name, payload: flipped.append((name, payload["status"]))), \
+         patch("conductor.commands.dlq._connect_to_site"), \
+         patch("conductor.commands.dlq._disconnect"):
+        result = runner.invoke(dlq_group, ["discard", "--site", "frappe.localhost"])
+    assert result.exit_code == 0
+    assert flipped == [("DLQE-001", "DISCARDED")]
