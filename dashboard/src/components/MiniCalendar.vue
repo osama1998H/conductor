@@ -1,10 +1,21 @@
 <template>
-  <div class="mini-calendar">
-    <div class="day-of-week" v-for="(d, i) in DOW" :key="i">{{ d }}</div>
-    <div v-for="cell in cells" :key="cell.iso"
-      :class="['day', { 'has-fires': cell.fires > 0, 'today': cell.iso === todayISO }]">
-      <span class="num">{{ cell.day }}</span>
-      <span v-if="cell.fires > 0" class="dot" :title="`${cell.fires} fires`"></span>
+  <div class="grid grid-cols-7 gap-0.5 max-w-80">
+    <div v-for="(d, i) in DOW" :key="i" class="text-center text-[10px] text-slate-400 p-1">{{ d }}</div>
+    <div
+      v-for="cell in cells"
+      :key="cell.iso"
+      :class="[
+        'aspect-square p-1 rounded-sm relative bg-slate-50',
+        cell.fires > 0 && 'bg-blue-100',
+        cell.iso === todayISO && 'outline outline-1 outline-primary',
+      ]"
+    >
+      <span class="text-2xs text-slate-600">{{ cell.day }}</span>
+      <span
+        v-if="cell.fires > 0"
+        class="absolute bottom-1 right-1 w-1.5 h-1.5 bg-primary rounded-full"
+        :title="`${cell.fires} fires`"
+      ></span>
     </div>
   </div>
 </template>
@@ -32,50 +43,3 @@ const cells = computed(() => {
   return out;
 });
 </script>
-
-<style scoped>
-.mini-calendar {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 2px;
-  max-width: 320px;
-}
-
-.day-of-week {
-  text-align: center;
-  font-size: 10px;
-  color: #94a3b8;
-  padding: 4px;
-}
-
-.day {
-  aspect-ratio: 1;
-  padding: 4px;
-  background: #f8fafc;
-  border-radius: 3px;
-  position: relative;
-}
-
-.day.today {
-  outline: 1px solid #2563eb;
-}
-
-.day.has-fires {
-  background: #dbeafe;
-}
-
-.day .num {
-  font-size: 11px;
-  color: #475569;
-}
-
-.day .dot {
-  position: absolute;
-  bottom: 4px;
-  right: 4px;
-  width: 6px;
-  height: 6px;
-  background: #2563eb;
-  border-radius: 50%;
-}
-</style>
