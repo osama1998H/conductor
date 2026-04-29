@@ -43,8 +43,8 @@
             v-for="row in rows"
             :key="row.job_id"
             :class="[
-              'cursor-pointer hover:bg-slate-50',
-              row.job_id === job_id && 'bg-indigo-100',
+              'cursor-pointer',
+              row.job_id === job_id ? 'bg-indigo-100' : 'hover:bg-slate-50',
             ]"
             @click="open(row.job_id)"
           >
@@ -62,7 +62,7 @@
       <div v-if="!rows.length" class="text-slate-400 p-3 text-center">No jobs match.</div>
     </div>
 
-    <div class="flex-1 min-w-0 border-l border-slate-200 pl-4 overflow-auto" v-if="job_id">
+    <div class="flex-1 min-w-0 border-l border-slate-300 pl-4 overflow-auto" v-if="job_id">
       <div v-if="!detail" class="text-slate-400 p-3 text-center">Loading…</div>
       <div v-else>
         <header class="flex gap-2 items-center mb-3 flex-wrap">
@@ -72,7 +72,7 @@
           <span>· queue {{ detail.queue }}</span>
         </header>
 
-        <nav class="flex gap-1 border-b border-slate-200 mb-3">
+        <nav class="flex gap-1 border-b border-slate-300 mb-3">
           <button
             v-for="t in ['overview', 'runs', 'args']"
             :key="t"
