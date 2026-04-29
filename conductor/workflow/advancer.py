@@ -271,7 +271,7 @@ def _advance_compensation(run, just_completed: Optional[str]) -> None:
             "started_at": _now_naive(), "finished_at": _now_naive(),
         }).insert(ignore_permissions=True)
         frappe.db.commit()
-        enqueue_advance(workflow_run_id, completed_step=next_step_id)
+        enqueue_advance(workflow_run_id, completed_step=next_step_id, is_compensation=True)
         return
 
     # Insert compensation row READY; dispatcher will mark RUNNING then enqueue.
@@ -293,13 +293,25 @@ def _advance_compensation(run, just_completed: Optional[str]) -> None:
     frappe.db.commit()
 
 
-def enqueue_advance(workflow_run_id: str, completed_step: Optional[str]) -> None:
-    """Enqueue an advancer job for this run. Idempotent on (run_id, completed_step)."""
+def enqueue_advance(
+    workflow_run_id: str,
+    completed_step: Optional[str],
+    *,
+    is_compensation: bool = False,
+) -> None:
+    """Enqueue an advancer job for this run.
+
+    Idempotent on (run_id, completed_step, is_compensation): the same step id
+    fires this hook twice — once when the forward step completes, once when
+    its compensation completes — so both kinds need their own idempotency
+    slot or the second call is silently deduplicated.
+    """
     completed_or_start = completed_step or "start"
+    kind = "comp" if is_compensation else "fwd"
     _conductor.enqueue(
         method="conductor.workflow.advancer.advance",
         queue="workflow",
-        idempotency_key=f"wf:{workflow_run_id}:advance:{completed_or_start}",
+        idempotency_key=f"wf:{workflow_run_id}:advance:{kind}:{completed_or_start}",
         workflow_run_id=workflow_run_id,
         completed_step=completed_step,
     )

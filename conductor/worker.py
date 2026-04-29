@@ -427,7 +427,11 @@ def _handle_one(
                         workflow_run_id=msg.workflow_run_id, step_id=msg.step_id,
                         is_compensation=is_comp, success=True,
                     )
-                    enqueue_advance(msg.workflow_run_id, completed_step=msg.step_id)
+                    enqueue_advance(
+                        msg.workflow_run_id,
+                        completed_step=msg.step_id,
+                        is_compensation=is_comp,
+                    )
 
             else:
                 policy = _resolve_policy_from_msg(msg)
@@ -466,7 +470,11 @@ def _handle_one(
                             error_type=type(exc).__name__,
                             error_message=str(exc),
                         )
-                        enqueue_advance(msg.workflow_run_id, completed_step=msg.step_id)
+                        enqueue_advance(
+                            msg.workflow_run_id,
+                            completed_step=msg.step_id,
+                            is_compensation=is_comp,
+                        )
                 log.error("job_failed", job_id=msg.job_id, attempt=msg.attempt)
 
             if watchdog:
