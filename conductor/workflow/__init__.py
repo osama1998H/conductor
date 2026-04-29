@@ -8,5 +8,12 @@ from conductor.workflow.decorator import (
     WorkflowDefinitionError,
     workflow,
 )
+from conductor.workflow.dispatcher import run_workflow, WorkflowNotFoundError
 
-__all__ = ["Step", "WorkflowDefinitionError", "workflow"]
+__all__ = [
+    "Step",
+    "WorkflowDefinitionError",
+    "WorkflowNotFoundError",
+    "run_workflow",
+    "workflow",
+]

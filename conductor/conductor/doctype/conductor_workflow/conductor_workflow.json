@@ -12,7 +12,7 @@
  "fields": [
   {"fieldname": "workflow_name", "fieldtype": "Data", "label": "Workflow Name", "reqd": 1, "unique": 1, "in_list_view": 1, "in_standard_filter": 1},
   {"fieldname": "enabled", "fieldtype": "Check", "label": "Enabled", "default": "1", "in_list_view": 1, "in_standard_filter": 1},
-  {"fieldname": "definition_path", "fieldtype": "Data", "label": "Definition Path", "description": "Dotted path to the @workflow class", "in_list_view": 1},
+  {"fieldname": "definition_path", "fieldtype": "Data", "label": "Definition Path", "description": "Dotted path to the @workflow class", "in_list_view": 1, "length": 250},
   {"fieldname": "version", "fieldtype": "Int", "label": "Version", "default": "1", "read_only": 1, "in_list_view": 1},
   {"fieldname": "definition_snapshot", "fieldtype": "Long Text", "label": "Definition Snapshot", "read_only": 1, "description": "Frozen DAG JSON; system-managed"},
   {"fieldname": "last_version_bumped_at", "fieldtype": "Datetime", "label": "Last Version Bumped At", "read_only": 1},
