@@ -12,6 +12,7 @@ from typing import Optional
 import frappe
 
 from conductor.logging import get_logger
+from conductor.messages import emit_workflow_event
 
 log = get_logger("conductor.workflow.worker_hooks")
 
@@ -83,6 +84,9 @@ def mark_step_terminal(
             "Conductor Workflow Run", workflow_run_id, "status", "COMPENSATING",
             update_modified=False,
         )
+        frappe.db.commit()
+        emit_workflow_event(run_id=workflow_run_id, status="COMPENSATING")
+        return
 
     # Halt run on compensation-step terminal failure (locked spec decision A.1).
     if not success and is_compensation:
@@ -92,4 +96,8 @@ def mark_step_terminal(
              "last_error": f"compensation failed at step {step_id}: {error_type}: {error_message}"},
             update_modified=False,
         )
+        frappe.db.commit()
+        emit_workflow_event(run_id=workflow_run_id, status="FAILED")
+        return
+
     frappe.db.commit()

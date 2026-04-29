@@ -13,6 +13,7 @@ import frappe
 from conductor.client import get_redis
 from conductor.config import load_config
 from conductor.logging import get_logger
+from conductor.messages import emit_workflow_event
 from conductor.serialization import dumps as msgpack_dumps
 from conductor.workflow.decorator import get_registered
 from conductor.workflow.idempotency import acquire_wfidem_lock
@@ -149,6 +150,11 @@ def run_workflow(
 
     _insert_step_runs(run_id, cls)
     _seed_deps_hash(r, site, run_id, cls)
+
+    emit_workflow_event(
+        run_id=run_id, status="PENDING",
+        workflow=name, definition_version=version,
+    )
 
     if idempotency_key:
         # Replace the placeholder in the idem key with the real run_id, so

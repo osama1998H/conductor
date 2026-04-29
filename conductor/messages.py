@@ -184,3 +184,27 @@ def decode(fields_dict: dict[str, str]) -> JobMessage:
         retry_on_names=_maybe_list(fields_dict.get("retry_on_names", "")),
         no_retry_on_names=_maybe_list(fields_dict.get("no_retry_on_names", "")),
     )
+
+
+_WORKFLOW_REALTIME_FIELDS = frozenset({
+    "workflow",
+    "definition_version",
+    "started_at",
+    "finished_at",
+    "last_error",
+})
+
+
+def emit_workflow_event(run_id: str, status: str, **fields) -> None:
+    """Publish a per-run realtime event scoped to the Workflow Run room."""
+    payload = {"run_id": run_id, "status": status, "ts": int(time.time())}
+    for k, v in fields.items():
+        if k in _WORKFLOW_REALTIME_FIELDS and v is not None:
+            payload[k] = v
+    frappe.publish_realtime(
+        event=f"conductor:workflow_run:{run_id}",
+        message=payload,
+        doctype="Conductor Workflow Run",
+        docname=run_id,
+        after_commit=True,
+    )

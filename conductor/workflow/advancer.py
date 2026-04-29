@@ -22,6 +22,7 @@ from conductor.client import get_redis
 from conductor.config import load_config
 from conductor.decorator import job as conductor_job
 from conductor.logging import get_logger
+from conductor.messages import emit_workflow_event
 from conductor.serialization import loads as msgpack_loads
 from conductor.workflow.decorator import get_registered
 from conductor.workflow.keys import wfdeps_key
@@ -154,6 +155,7 @@ def _advance_forward(run, completed_step: Optional[str]) -> None:
         run.started_at = _now_naive()
         run.save(ignore_permissions=True)
         frappe.db.commit()
+        emit_workflow_event(run_id=run.name, status="RUNNING")
 
     run_kwargs = _decode_kwargs(run.input_kwargs or "")
 
@@ -186,6 +188,7 @@ def _advance_forward(run, completed_step: Optional[str]) -> None:
             update_modified=False,
         )
         frappe.db.commit()
+        emit_workflow_event(run_id=workflow_run_id, status="SUCCEEDED")
 
 
 def _advance_compensation(run, just_completed: Optional[str]) -> None:
@@ -230,6 +233,7 @@ def _advance_compensation(run, just_completed: Optional[str]) -> None:
             update_modified=False,
         )
         frappe.db.commit()
+        emit_workflow_event(run_id=workflow_run_id, status="FAILED")
         return
 
     from conductor.workflow.topo import reverse_topo_order

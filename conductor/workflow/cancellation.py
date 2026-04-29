@@ -14,6 +14,7 @@ import conductor.cancellation
 from conductor.client import get_redis
 from conductor.config import load_config
 from conductor.logging import get_logger
+from conductor.messages import emit_workflow_event
 from conductor.workflow.keys import wfdeps_key
 
 log = get_logger("conductor.workflow.cancellation")
@@ -71,6 +72,7 @@ def cancel_workflow_run(run_id: str, *, user: Optional[str] = None) -> None:
         update_modified=False,
     )
     frappe.db.commit()
+    emit_workflow_event(run_id=run_id, status="CANCELLED")
 
     # Drop the deps hash; Lua scripts no longer need it.
     cfg = load_config(frappe.local.conf)
