@@ -338,13 +338,13 @@ def test_decorator_raises_on_redefining_workflow_name():
 
     @workflow(name="W6", queue="default")
     class W6a:
-        a = Step("a")
+        _a = Step("a")
         def a(self): pass
 
     with pytest.raises(WorkflowDefinitionError, match="already registered"):
         @workflow(name="W6", queue="default")
         class W6b:
-            a = Step("a")
+            _a = Step("a")
             def a(self): pass
 
 
@@ -353,8 +353,8 @@ def test_decorator_exposes_steps_in_declaration_order():
 
     @workflow(name="W7", queue="default")
     class W7:
-        a = Step("a")
-        b = Step("b", depends_on=("a",))
+        _a = Step("a")
+        _b = Step("b", depends_on=("a",))
 
         def a(self): pass
         def b(self): pass
@@ -676,8 +676,8 @@ def test_decorator_raises_on_dependency_cycle():
     with pytest.raises(WorkflowDefinitionError, match="cycle"):
         @workflow(name="W_cycle", queue="default")
         class W_cycle:
-            a = Step("a", depends_on=("b",))
-            b = Step("b", depends_on=("a",))
+            _a = Step("a", depends_on=("b",))
+            _b = Step("b", depends_on=("a",))
             def a(self): pass
             def b(self): pass
 ```
@@ -729,10 +729,10 @@ def _clear_registry():
 def _make_diamond_class(name: str):
     @workflow(name=name, queue="default")
     class W:
-        a = Step("a")
-        b = Step("b", depends_on=("a",), compensation="undo_b")
-        c = Step("c", depends_on=("a",))
-        d = Step("d", depends_on=("b", "c"))
+        _a = Step("a")
+        _b = Step("b", depends_on=("a",), compensation="undo_b")
+        _c = Step("c", depends_on=("a",))
+        _d = Step("d", depends_on=("b", "c"))
         def a(self): pass
         def b(self): pass
         def undo_b(self): pass
@@ -777,7 +777,7 @@ def test_topology_hash_is_insensitive_to_method_body():
 
     @workflow(name="W_body", queue="default")
     class V1:
-        a = Step("a")
+        _a = Step("a")
         def a(self): return 1
     h1 = topology_hash(V1)
 
@@ -785,7 +785,7 @@ def test_topology_hash_is_insensitive_to_method_body():
 
     @workflow(name="W_body", queue="default")
     class V2:
-        a = Step("a")
+        _a = Step("a")
         def a(self): return 99   # body changed
     h2 = topology_hash(V2)
 
@@ -796,8 +796,8 @@ def test_topology_hash_changes_when_dependency_added():
     _clear_registry()
     @workflow(name="W_dep", queue="default")
     class V1:
-        a = Step("a")
-        b = Step("b", depends_on=())
+        _a = Step("a")
+        _b = Step("b", depends_on=())
         def a(self): pass
         def b(self): pass
     h1 = topology_hash(V1)
@@ -805,8 +805,8 @@ def test_topology_hash_changes_when_dependency_added():
     _clear_registry()
     @workflow(name="W_dep", queue="default")
     class V2:
-        a = Step("a")
-        b = Step("b", depends_on=("a",))
+        _a = Step("a")
+        _b = Step("b", depends_on=("a",))
         def a(self): pass
         def b(self): pass
     h2 = topology_hash(V2)
@@ -818,14 +818,14 @@ def test_topology_hash_changes_when_compensation_added():
     _clear_registry()
     @workflow(name="W_comp", queue="default")
     class V1:
-        a = Step("a")
+        _a = Step("a")
         def a(self): pass
     h1 = topology_hash(V1)
 
     _clear_registry()
     @workflow(name="W_comp", queue="default")
     class V2:
-        a = Step("a", compensation="undo_a")
+        _a = Step("a", compensation="undo_a")
         def a(self): pass
         def undo_a(self): pass
     h2 = topology_hash(V2)
@@ -1676,10 +1676,10 @@ def _make_diamond(name: str = "DiamondTestFlow"):
 
     @workflow(name=name, queue="default")
     class Diamond:
-        a = Step("a")
-        b = Step("b", depends_on=("a",), compensation="undo_b")
-        c = Step("c", depends_on=("a",))
-        d = Step("d", depends_on=("b", "c"))
+        _a = Step("a")
+        _b = Step("b", depends_on=("a",), compensation="undo_b")
+        _c = Step("c", depends_on=("a",))
+        _d = Step("d", depends_on=("b", "c"))
         def a(self): pass
         def b(self): pass
         def undo_b(self): pass
@@ -1769,10 +1769,10 @@ class TestRunWorkflowDispatch(unittest.TestCase):
 
         @workflow(name="DiamondTestFlow", queue="default")
         class V2:
-            a = Step("a")
-            b = Step("b", depends_on=("a",))
-            c = Step("c", depends_on=("a", "b"))   # added dep on b
-            d = Step("d", depends_on=("b", "c"))
+            _a = Step("a")
+            _b = Step("b", depends_on=("a",))
+            _c = Step("c", depends_on=("a", "b"))   # added dep on b
+            _d = Step("d", depends_on=("b", "c"))
             def a(self): pass
             def b(self): pass
             def c(self): pass
@@ -2032,10 +2032,10 @@ def _make_diamond(name="AdvDiamond"):
 
     @workflow(name=name, queue="default")
     class D:
-        a = Step("a")
-        b = Step("b", depends_on=("a",))
-        c = Step("c", depends_on=("a",))
-        d = Step("d", depends_on=("b", "c"))
+        _a = Step("a")
+        _b = Step("b", depends_on=("a",))
+        _c = Step("c", depends_on=("a",))
+        _d = Step("d", depends_on=("b", "c"))
         def a(self): pass
         def b(self): pass
         def c(self): pass
@@ -2409,7 +2409,7 @@ def _make_simple(name="HookFlow"):
 
     @workflow(name=name, queue="default")
     class F:
-        a = Step("a", compensation="undo_a")
+        _a = Step("a", compensation="undo_a")
         def a(self): pass
         def undo_a(self): pass
     return F
@@ -2702,10 +2702,10 @@ def _make_diamond(name="CompDiamond"):
 
     @workflow(name=name, queue="default")
     class D:
-        a = Step("a", compensation="undo_a")
-        b = Step("b", depends_on=("a",), compensation="undo_b")
-        c = Step("c", depends_on=("a",))                     # no comp
-        d = Step("d", depends_on=("b", "c"), compensation="undo_d")
+        _a = Step("a", compensation="undo_a")
+        _b = Step("b", depends_on=("a",), compensation="undo_b")
+        _c = Step("c", depends_on=("a",))                     # no comp
+        _d = Step("d", depends_on=("b", "c"), compensation="undo_d")
         def a(self): pass
         def undo_a(self): pass
         def b(self): pass
@@ -3013,8 +3013,8 @@ def _make_simple(name="CancelFlow"):
 
     @workflow(name=name, queue="default")
     class F:
-        a = Step("a")
-        b = Step("b", depends_on=("a",))
+        _a = Step("a")
+        _b = Step("b", depends_on=("a",))
         def a(self): pass
         def b(self): pass
     return F
@@ -3556,8 +3556,8 @@ def _make_simple(name="ApiFlow"):
 
     @workflow(name=name, queue="default")
     class F:
-        a = Step("a")
-        b = Step("b", depends_on=("a",))
+        _a = Step("a")
+        _b = Step("b", depends_on=("a",))
         def a(self): pass
         def b(self): pass
     return F
@@ -4118,10 +4118,10 @@ def _setup_workflow():
 
     @workflow(name="ChaosFlow", queue="default")
     class C:
-        a = Step("a")
-        b = Step("b", depends_on=("a",))
-        c = Step("c", depends_on=("a",))
-        d = Step("d", depends_on=("b", "c"))
+        _a = Step("a")
+        _b = Step("b", depends_on=("a",))
+        _c = Step("c", depends_on=("a",))
+        _d = Step("d", depends_on=("b", "c"))
         def a(self): pass
         def b(self): pass
         def c(self): pass
@@ -4195,10 +4195,10 @@ def test_diamond_c_terminal_fail_compensates_a(real_redis, frappe_site, monkeypa
 
     @workflow(name="ExitFlow", queue="default")
     class E:
-        a = Step("a", compensation="undo_a")
-        b = Step("b", depends_on=("a",), compensation="undo_b")
-        c = Step("c", depends_on=("a",))
-        d = Step("d", depends_on=("b", "c"))
+        _a = Step("a", compensation="undo_a")
+        _b = Step("b", depends_on=("a",), compensation="undo_b")
+        _c = Step("c", depends_on=("a",))
+        _d = Step("d", depends_on=("b", "c"))
 
         def a(self): pass
         def undo_a(self):
