@@ -29,6 +29,14 @@ _DEFAULT_WFIDEM_TTL = 86_400  # 24h, mirrors job idempotency
 _ENQUEUE_ADVANCER_HOOK: Optional[Callable[[str, Optional[str]], None]] = None
 
 
+def _bind_advancer_hook():
+    """Late binding to avoid circular import — called once on first run_workflow."""
+    global _ENQUEUE_ADVANCER_HOOK
+    if _ENQUEUE_ADVANCER_HOOK is None:
+        from conductor.workflow.advancer import enqueue_advance
+        _ENQUEUE_ADVANCER_HOOK = enqueue_advance
+
+
 class WorkflowNotFoundError(Exception):
     pass
 
@@ -148,6 +156,7 @@ def run_workflow(
         from conductor.workflow.keys import wfidem_key as _kfn
         r.set(_kfn(site, idempotency_key), run_id, ex=_DEFAULT_WFIDEM_TTL, xx=True)
 
+    _bind_advancer_hook()
     if _ENQUEUE_ADVANCER_HOOK is not None:
         _ENQUEUE_ADVANCER_HOOK(run_id, None)
 
