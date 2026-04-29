@@ -1,0 +1,1 @@
+import{_ as r,o as a,c as n,t as c,b as l}from"./index-C7AcquK2.js";const p={class:"json"},u={__name:"JsonViewer",props:{value:{default:null}},setup(e){const t=e,s=l(()=>{try{return JSON.stringify(t.value,null,2)}catch(o){return String(t.value)}});return(o,_)=>(a(),n("pre",p,c(s.value),1))}},m=r(u,[["__scopeId","data-v-3b53a97b"]]);export{m as J};
