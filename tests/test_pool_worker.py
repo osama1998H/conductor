@@ -337,3 +337,51 @@ def test_pool_cancel_pollers_one_per_site_share_event_map():
         # Don't actually start them in the test -- the start() side-effect
         # would try to talk to Frappe on those non-existent sites.
         pass
+
+
+def test_resolve_pool_sites_auto_calls_discovery(monkeypatch):
+    monkeypatch.setattr(
+        "conductor.commands.worker.discover_installed_sites",
+        lambda sp: ["alpha.test", "gamma.test"],
+        raising=False,
+    )
+    from conductor.commands.worker import _resolve_pool_sites
+    out = _resolve_pool_sites("auto", sites_path="/tmp/sites", bench_site="frappe.localhost")
+    assert out == ["alpha.test", "gamma.test"]
+
+
+def test_resolve_pool_sites_comma_list_parses_and_strips():
+    from conductor.commands.worker import _resolve_pool_sites
+    out = _resolve_pool_sites(
+        "alpha.test, beta.test ,gamma.test",
+        sites_path="/tmp", bench_site="frappe.localhost",
+    )
+    assert out == ["alpha.test", "beta.test", "gamma.test"]
+
+
+def test_resolve_pool_sites_comma_list_drops_empty_entries():
+    from conductor.commands.worker import _resolve_pool_sites
+    out = _resolve_pool_sites(",,alpha.test,,", sites_path="/tmp", bench_site="x")
+    assert out == ["alpha.test"]
+
+
+def test_resolve_pool_sites_none_falls_back_to_bench_site():
+    from conductor.commands.worker import _resolve_pool_sites
+    out = _resolve_pool_sites(None, sites_path="/tmp", bench_site="frappe.localhost")
+    assert out == ["frappe.localhost"]
+
+
+def test_resolve_pool_sites_auto_with_no_installed_sites_raises(monkeypatch):
+    monkeypatch.setattr(
+        "conductor.commands.worker.discover_installed_sites",
+        lambda sp: [],
+        raising=False,
+    )
+    from conductor.commands.worker import _resolve_pool_sites
+
+    import pytest
+    with pytest.raises(SystemExit):
+        _resolve_pool_sites(
+            "auto", sites_path="/tmp",
+            bench_site="frappe.localhost",
+        )
