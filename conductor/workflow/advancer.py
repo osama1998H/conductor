@@ -59,19 +59,30 @@ def _step_run(workflow_run_id: str, step_id: str, *, is_compensation: int = 0):
     )
 
 
-def _enqueue_step_job(*, run_id: str, step_id: str, cls, run_kwargs: dict[str, Any]) -> str:
+def _enqueue_step_job(*, run_id: str, step_id: str, cls, run_kwargs: dict[str, Any], is_compensation: bool = False) -> str:
     """Enqueue a single step's underlying Conductor Job.
 
     The full method path is the workflow class's dotted path + the step
-    method name. The worker resolves this via frappe.get_attr.
+    method name (or compensation method for compensation steps).
+    The worker resolves this via frappe.get_attr.
     """
-    method_path = f"{cls.__module__}.{cls.__qualname__}.{step_id}"
+    if is_compensation:
+        # For compensation, find the step and use its compensation method name.
+        step_def = next(s for s in cls.__conductor_workflow_steps__ if s.name == step_id)
+        method_name = step_def.compensation
+        idempotency_key = f"wf:{run_id}:{step_id}:compensate"
+    else:
+        method_name = step_id
+        idempotency_key = f"wf:{run_id}:{step_id}:dispatch"
+
+    method_path = f"{cls.__module__}.{cls.__qualname__}.{method_name}"
     return _conductor.enqueue(
         method=method_path,
         queue=cls.__conductor_workflow_queue__,
-        idempotency_key=f"wf:{run_id}:{step_id}:dispatch",
+        idempotency_key=idempotency_key,
         __workflow_run_id=run_id,
         __step_id=step_id,
+        __is_compensation=is_compensation,
         **run_kwargs,
     )
 
@@ -99,12 +110,23 @@ def _all_forward_succeeded(run_id: str) -> bool:
 
 @conductor_job(queue="workflow", max_attempts=5, timeout=120)
 def advance(*, workflow_run_id: str, completed_step: Optional[str] = None) -> None:
-    """Re-evaluate a run and dispatch any newly-ready forward steps."""
+    """Re-evaluate a run and dispatch any newly-ready forward or compensation steps."""
     run = frappe.get_doc("Conductor Workflow Run", workflow_run_id)
-    if run.status not in ("PENDING", "RUNNING"):
-        log.debug("advance_noop_status", run_id=workflow_run_id, status=run.status)
+
+    if run.status in ("PENDING", "RUNNING"):
+        _advance_forward(run, completed_step)
         return
 
+    if run.status == "COMPENSATING":
+        _advance_compensation(run, completed_step)
+        return
+
+    log.debug("advance_noop_terminal_status", run_id=workflow_run_id, status=run.status)
+
+
+def _advance_forward(run, completed_step: Optional[str]) -> None:
+    """Forward-path logic: dispatch newly-ready steps."""
+    workflow_run_id = run.name
     cls = get_registered(run.workflow)
     if cls is None:
         log.error("advance_unknown_workflow", run_id=workflow_run_id, workflow=run.workflow)
@@ -164,6 +186,86 @@ def advance(*, workflow_run_id: str, completed_step: Optional[str] = None) -> No
             update_modified=False,
         )
         frappe.db.commit()
+
+
+def _advance_compensation(run, just_completed: Optional[str]) -> None:
+    """Compensation-path logic: dispatch compensation steps in reverse-topo order."""
+    workflow_run_id = run.name
+    cls = get_registered(run.workflow)
+    if cls is None:
+        return
+
+    # Wait for in-flight forward steps to settle.
+    in_flight = frappe.db.count(
+        "Conductor Workflow Step Run",
+        filters={
+            "workflow_run": workflow_run_id,
+            "is_compensation": 0,
+            "status": ["in", ["PENDING", "READY", "RUNNING"]],
+        },
+    )
+    if in_flight:
+        return
+
+    completed_forward = {
+        r["step_id"] for r in frappe.get_all(
+            "Conductor Workflow Step Run",
+            filters={"workflow_run": workflow_run_id, "is_compensation": 0, "status": "SUCCEEDED"},
+            fields=["step_id"],
+        )
+    }
+    already_compensated = {
+        r["step_id"] for r in frappe.get_all(
+            "Conductor Workflow Step Run",
+            filters={"workflow_run": workflow_run_id, "is_compensation": 1},
+            fields=["step_id"],
+        )
+    }
+    pending = completed_forward - already_compensated
+
+    if not pending:
+        frappe.db.set_value(
+            "Conductor Workflow Run", workflow_run_id,
+            {"status": "FAILED", "finished_at": _now_naive()},
+            update_modified=False,
+        )
+        frappe.db.commit()
+        return
+
+    from conductor.workflow.topo import reverse_topo_order
+    sequence = reverse_topo_order(cls.__conductor_workflow_steps__, only=pending)
+    next_step_id = sequence[0]
+    step_def = next(s for s in cls.__conductor_workflow_steps__ if s.name == next_step_id)
+
+    if step_def.compensation is None:
+        # No-op compensation row, then recurse via re-enqueue.
+        frappe.get_doc({
+            "doctype": "Conductor Workflow Step Run",
+            "workflow_run": workflow_run_id, "step_id": next_step_id,
+            "is_compensation": 1, "status": "COMPENSATED",
+            "started_at": _now_naive(), "finished_at": _now_naive(),
+        }).insert(ignore_permissions=True)
+        frappe.db.commit()
+        enqueue_advance(workflow_run_id, completed_step=next_step_id)
+        return
+
+    # Insert compensation row READY; dispatcher will mark RUNNING then enqueue.
+    sr = frappe.get_doc({
+        "doctype": "Conductor Workflow Step Run",
+        "workflow_run": workflow_run_id, "step_id": next_step_id,
+        "is_compensation": 1, "status": "READY",
+    }).insert(ignore_permissions=True)
+    frappe.db.commit()
+
+    run_kwargs = _decode_kwargs(run.input_kwargs or "")
+    job_id = _enqueue_step_job(
+        run_id=workflow_run_id, step_id=next_step_id, cls=cls, run_kwargs=run_kwargs,
+        is_compensation=True,
+    )
+    frappe.db.set_value(
+        "Conductor Workflow Step Run", sr.name, "job", job_id, update_modified=False,
+    )
+    frappe.db.commit()
 
 
 def enqueue_advance(workflow_run_id: str, completed_step: Optional[str]) -> None:
