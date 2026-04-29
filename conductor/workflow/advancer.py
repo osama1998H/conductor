@@ -198,13 +198,18 @@ def _advance_compensation(run, just_completed: Optional[str]) -> None:
     if cls is None:
         return
 
-    # Skip un-dispatched forward steps (like cancellation does).
+    # Skip not-yet-dispatched forward steps so they don't block in-flight
+    # forever (e.g., D depending on B+C is still PENDING because C failed;
+    # advancer no-ops on COMPENSATING so D would sit PENDING indefinitely).
+    # Only PENDING is safe to skip — READY rows have a job already on the
+    # stream and a worker will pick them up, complete them, and re-fire
+    # the advancer via the worker hook.
     skip_targets = frappe.get_all(
         "Conductor Workflow Step Run",
         filters={
             "workflow_run": workflow_run_id,
             "is_compensation": 0,
-            "status": ["in", ["PENDING", "READY"]],
+            "status": "PENDING",
         },
         pluck="name",
     )
@@ -212,13 +217,13 @@ def _advance_compensation(run, just_completed: Optional[str]) -> None:
         frappe.db.set_value("Conductor Workflow Step Run", n, "status", "SKIPPED",
                             update_modified=False)
 
-    # Wait for in-flight forward steps to settle (only RUNNING now, since we skipped PENDING/READY).
+    # Wait for any forward step in flight (READY or RUNNING) to terminate.
     in_flight = frappe.db.count(
         "Conductor Workflow Step Run",
         filters={
             "workflow_run": workflow_run_id,
             "is_compensation": 0,
-            "status": "RUNNING",
+            "status": ["in", ["READY", "RUNNING"]],
         },
     )
     if in_flight:
