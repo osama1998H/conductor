@@ -111,6 +111,102 @@ def _mark_worker_gone(worker_id: str) -> None:
         frappe.db.commit()
 
 
+def _register_worker_pool(
+    worker_id: str,
+    *,
+    queues: list[str],
+    sites: list[str],
+    sites_path: str,
+    primary_site: str,
+) -> None:
+    """Insert one Conductor Worker row per site so each site's reaper sees us.
+
+    Each per-site init/connect/destroy cycle tears down frappe.local; the
+    trailing init+connect on primary_site restores the outer CLI context that
+    the worker loop, CancelPoller, and _handle_one all depend on.
+    """
+    for site in sites:
+        frappe.init(site=site, sites_path=sites_path)
+        try:
+            frappe.connect()
+            if not frappe.db.exists("Conductor Worker", worker_id):
+                frappe.get_doc({
+                    "doctype": "Conductor Worker",
+                    "worker_id": worker_id,
+                    "host": socket.gethostname(),
+                    "pid": os.getpid(),
+                    "queues": json.dumps(queues),
+                    "site": site,
+                    "status": "ALIVE",
+                    "started_at": _now_naive(),
+                    "last_heartbeat": _now_naive(),
+                }).insert(ignore_permissions=True)
+                frappe.db.commit()
+        finally:
+            frappe.destroy()
+    frappe.init(site=primary_site, sites_path=sites_path)
+    frappe.connect()
+
+
+def _heartbeat_pool(
+    worker_id: str,
+    *,
+    sites: list[str],
+    sites_path: str,
+    primary_site: str,
+) -> None:
+    """Fanout heartbeat across every site this worker serves. Restores the
+    primary-site frappe.local context after the per-site fanout so the outer
+    CLI init context remains valid."""
+    for site in sites:
+        frappe.init(site=site, sites_path=sites_path)
+        try:
+            frappe.connect()
+            frappe.db.set_value(
+                "Conductor Worker",
+                worker_id,
+                {"last_heartbeat": _now_naive(), "status": "ALIVE"},
+                update_modified=False,
+            )
+            frappe.db.commit()
+        finally:
+            frappe.destroy()
+    frappe.init(site=primary_site, sites_path=sites_path)
+    frappe.connect()
+
+
+def _mark_worker_gone_pool(
+    worker_id: str,
+    *,
+    sites: list[str],
+    sites_path: str,
+    primary_site: str,
+) -> None:
+    """Best-effort GONE status across every site, even if individual sites
+    fail. The trailing init+connect is best-effort because the process is
+    shutting down."""
+    for site in sites:
+        try:
+            frappe.init(site=site, sites_path=sites_path)
+            try:
+                frappe.connect()
+                if frappe.db.exists("Conductor Worker", worker_id):
+                    frappe.db.set_value(
+                        "Conductor Worker", worker_id, "status", "GONE",
+                        update_modified=False,
+                    )
+                    frappe.db.commit()
+            finally:
+                frappe.destroy()
+        except Exception as e:
+            log.warning("mark_gone_failed_for_site", site=site, error=str(e))
+    try:
+        frappe.init(site=primary_site, sites_path=sites_path)
+        frappe.connect()
+    except Exception:
+        pass
+
+
 def _set_job_running(job_id: str, worker_id: str) -> None:
     frappe.db.set_value(
         "Conductor Job",
@@ -599,8 +695,13 @@ def run_worker_pool(
     r = get_redis(cfg.redis_url)
 
     worker_id = _make_worker_id()
-    # Task 7 will replace this with multi-site registration.
-    _register_worker(worker_id, queues, primary_site)
+    _register_worker_pool(
+        worker_id,
+        queues=queues,
+        sites=sites,
+        sites_path=sites_path,
+        primary_site=primary_site,
+    )
     _install_signal_handlers()
 
     log_ctx = log.bind(worker_id=worker_id, sites=sites)
@@ -620,7 +721,12 @@ def run_worker_pool(
         while not _shutdown.is_set():
             now = time.time()
             if now - last_beat >= _HEARTBEAT_SECS:
-                _heartbeat(worker_id)
+                _heartbeat_pool(
+                    worker_id,
+                    sites=sites,
+                    sites_path=sites_path,
+                    primary_site=primary_site,
+                )
                 last_beat = now
 
             try:
@@ -636,7 +742,12 @@ def run_worker_pool(
         log_ctx.info("worker_shutting_down", grace_seconds=grace_seconds)
         cancel_poller.stop()
         pool.shutdown(wait=True)
-        _mark_worker_gone(worker_id)
+        _mark_worker_gone_pool(
+            worker_id,
+            sites=sites,
+            sites_path=sites_path,
+            primary_site=primary_site,
+        )
         log_ctx.info("worker_stopped")
 
 
