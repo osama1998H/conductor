@@ -3,8 +3,8 @@ import { ref, watch, onMounted } from 'vue';
 import mermaid from 'mermaid';
 
 const props = defineProps({
-  snapshot: { type: String, required: true },     // canonical-JSON snapshot
-  steps: { type: Array, required: true },     // step rows with status
+  snapshot: { type: String, required: true },
+  steps: { type: Array, required: true },
 });
 
 const container = ref(null);
@@ -56,13 +56,5 @@ watch(() => [props.snapshot, props.steps], render, { deep: true });
 </script>
 
 <template>
-  <div ref="container" class="mermaid-dag" />
+  <div ref="container" class="flex justify-center py-4" />
 </template>
-
-<style scoped>
-.mermaid-dag {
-  display: flex;
-  justify-content: center;
-  padding: 16px 0;
-}
-</style>

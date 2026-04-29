@@ -1,7 +1,17 @@
 <template>
-  <div class="toast-host">
+  <div class="fixed top-4 right-4 z-[300] flex flex-col gap-2 pointer-events-none">
     <transition-group name="toast">
-      <div v-for="t in toasts" :key="t.id" :class="['toast', `toast-${t.type}`]">
+      <div
+        v-for="t in toasts"
+        :key="t.id"
+        :class="[
+          'bg-white border border-slate-300 border-l-4 rounded',
+          'px-3.5 py-2.5 text-sm text-slate-800',
+          'shadow-[0_4px_12px_rgba(15,23,42,0.12)]',
+          'min-w-60 max-w-[420px] pointer-events-auto',
+          toneClasses(t.type),
+        ]"
+      >
         {{ t.message }}
       </div>
     </transition-group>
@@ -11,48 +21,18 @@
 <script setup>
 import { useToasts } from "../stores/useToast";
 const toasts = useToasts();
+
+function toneClasses(type) {
+  switch (type) {
+    case "success": return "border-l-green-600";
+    case "error":   return "border-l-danger bg-red-50 text-red-800";
+    case "warning": return "border-l-orange-600";
+    default:        return "border-l-primary";
+  }
+}
 </script>
 
 <style scoped>
-.toast-host {
-  position: fixed;
-  top: 16px;
-  right: 16px;
-  z-index: 300;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  pointer-events: none;
-}
-
-.toast {
-  background: #fff;
-  border: 1px solid #cbd5e1;
-  border-left: 4px solid #2563eb;
-  border-radius: 4px;
-  padding: 10px 14px;
-  font-size: 13px;
-  color: #1e293b;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
-  min-width: 240px;
-  max-width: 420px;
-  pointer-events: auto;
-}
-
-.toast-success {
-  border-left-color: #16a34a;
-}
-
-.toast-error {
-  border-left-color: #dc2626;
-  background: #fef2f2;
-  color: #991b1b;
-}
-
-.toast-warning {
-  border-left-color: #ea580c;
-}
-
 .toast-enter-active,
 .toast-leave-active {
   transition: transform 0.16s ease, opacity 0.16s ease;

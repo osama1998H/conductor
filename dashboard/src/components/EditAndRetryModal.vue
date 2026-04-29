@@ -1,19 +1,39 @@
 <template>
-  <div class="modal-backdrop" @click.self="$emit('cancel')">
-    <div class="modal">
-      <h3>Edit &amp; retry — {{ entryName }}</h3>
-      <p class="hint">JSON-validated on save. Edited payload must remain JSON-native.</p>
+  <div
+    class="fixed inset-0 bg-black/40 flex items-center justify-center z-[100]"
+    @click.self="$emit('cancel')"
+  >
+    <div class="bg-white rounded-md p-5 min-w-[480px] max-w-[720px] max-h-[80vh] overflow-auto">
+      <h3 class="mt-0">Edit &amp; retry — {{ entryName }}</h3>
+      <p class="text-xs text-slate-500 mb-4">JSON-validated on save. Edited payload must remain JSON-native.</p>
 
-      <label>args (JSON array)</label>
-      <textarea v-model="argsText" rows="5"></textarea>
-      <label>kwargs (JSON object)</label>
-      <textarea v-model="kwargsText" rows="10"></textarea>
+      <label class="block text-xs font-medium mt-2 mb-1">args (JSON array)</label>
+      <textarea
+        v-model="argsText"
+        rows="5"
+        class="w-full font-mono text-xs p-2 border border-slate-300 rounded"
+      ></textarea>
+      <label class="block text-xs font-medium mt-2 mb-1">kwargs (JSON object)</label>
+      <textarea
+        v-model="kwargsText"
+        rows="10"
+        class="w-full font-mono text-xs p-2 border border-slate-300 rounded"
+      ></textarea>
 
-      <div v-if="error" class="error">{{ error }}</div>
+      <div v-if="error" class="text-red-800 my-2">{{ error }}</div>
 
-      <div class="actions">
-        <button @click="$emit('cancel')">Cancel</button>
-        <button class="primary" @click="onSave" :disabled="saving">{{ saving ? "Saving…" : "Save & retry" }}</button>
+      <div class="flex justify-end gap-2 mt-4">
+        <button
+          class="px-3.5 py-1.5 border border-slate-300 bg-white rounded cursor-pointer
+                 disabled:opacity-60 disabled:cursor-not-allowed"
+          @click="$emit('cancel')"
+        >Cancel</button>
+        <button
+          class="px-3.5 py-1.5 bg-primary text-white border border-primary rounded cursor-pointer
+                 disabled:opacity-60 disabled:cursor-not-allowed"
+          @click="onSave"
+          :disabled="saving"
+        >{{ saving ? "Saving…" : "Save & retry" }}</button>
       </div>
     </div>
   </div>
@@ -52,82 +72,3 @@ async function onSave() {
   }
 }
 </script>
-
-<style scoped>
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-}
-
-.modal {
-  background: white;
-  border-radius: 6px;
-  padding: 20px;
-  min-width: 480px;
-  max-width: 720px;
-  max-height: 80vh;
-  overflow: auto;
-}
-
-.modal h3 {
-  margin-top: 0;
-}
-
-.hint {
-  font-size: 12px;
-  color: #64748b;
-  margin-bottom: 16px;
-}
-
-label {
-  display: block;
-  font-size: 12px;
-  font-weight: 500;
-  margin: 8px 0 4px;
-}
-
-textarea {
-  width: 100%;
-  font-family: ui-monospace, monospace;
-  font-size: 12px;
-  padding: 8px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-}
-
-.error {
-  color: #991b1b;
-  margin: 8px 0;
-}
-
-.actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 16px;
-}
-
-.actions button {
-  padding: 6px 14px;
-  border: 1px solid #ccc;
-  background: white;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.actions button.primary {
-  background: #2563eb;
-  color: white;
-  border-color: #2563eb;
-}
-
-.actions button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-</style>

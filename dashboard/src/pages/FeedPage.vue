@@ -1,22 +1,27 @@
 <template>
-  <div class="feed-page">
-    <div class="header-bar">
-      <h2>Live Feed</h2>
-      <label class="pause">
+  <div class="px-2">
+    <div class="flex gap-4 items-center mb-4">
+      <h2 class="m-0">Live Feed</h2>
+      <label class="flex gap-1 items-center text-sm text-slate-600 cursor-pointer">
         <input type="checkbox" v-model="paused" /> Pause updates
       </label>
-      <span class="hint">{{ paused ? "(showing snapshot)" : `(updating; ${rows.length} jobs)` }}</span>
+      <span class="text-xs text-slate-400">{{ paused ? "(showing snapshot)" : `(updating; ${rows.length} jobs)` }}</span>
     </div>
 
-    <div class="feed">
-      <div v-for="row in rows" :key="row.job_id" class="feed-row" @click="open(row.job_id)">
-        <span class="ts">{{ formatTime(row.enqueued_at) }}</span>
+    <div class="max-h-[calc(100vh-180px)] overflow-y-auto">
+      <div
+        v-for="row in rows"
+        :key="row.job_id"
+        class="flex gap-3 items-center px-3 py-2 border-b border-slate-200 cursor-pointer text-sm hover:bg-slate-50"
+        @click="open(row.job_id)"
+      >
+        <span class="font-mono text-2xs text-slate-500 min-w-[140px]">{{ formatTime(row.enqueued_at) }}</span>
         <StatusBadge :status="row.status" />
-        <span class="queue">{{ row.queue }}</span>
-        <code class="method">{{ row.method }}</code>
-        <span class="job-id mono">{{ row.job_id.slice(0, 8) }}…</span>
+        <span class="text-xs text-slate-600 min-w-20">{{ row.queue }}</span>
+        <code class="font-mono text-xs flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{{ row.method }}</code>
+        <span class="font-mono text-2xs text-slate-400">{{ row.job_id.slice(0, 8) }}…</span>
       </div>
-      <div v-if="!rows.length" class="empty">No jobs yet.</div>
+      <div v-if="!rows.length" class="p-6 text-center text-slate-400">No jobs yet.</div>
     </div>
   </div>
 </template>
@@ -49,91 +54,3 @@ watch(paused, (now) => {
 
 function open(id) { router.push({ path: `/jobs/${id}` }); }
 </script>
-
-<style scoped>
-.feed-page {
-  padding: 0 8px;
-}
-
-.header-bar {
-  display: flex;
-  gap: 16px;
-  align-items: center;
-  margin-bottom: 16px;
-}
-
-.header-bar h2 {
-  margin: 0;
-}
-
-.pause {
-  display: flex;
-  gap: 4px;
-  align-items: center;
-  font-size: 13px;
-  color: #475569;
-  cursor: pointer;
-}
-
-.hint {
-  font-size: 12px;
-  color: #94a3b8;
-}
-
-.feed {
-  max-height: calc(100vh - 180px);
-  overflow-y: auto;
-}
-
-.feed-row {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  padding: 8px 12px;
-  border-bottom: 1px solid #eee;
-  cursor: pointer;
-  font-size: 13px;
-}
-
-.feed-row:hover {
-  background: #f8fafc;
-}
-
-.ts {
-  font-family: ui-monospace, monospace;
-  font-size: 11px;
-  color: #64748b;
-  min-width: 140px;
-}
-
-.queue {
-  font-size: 12px;
-  color: #475569;
-  min-width: 80px;
-}
-
-.method {
-  font-family: ui-monospace, monospace;
-  font-size: 12px;
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.job-id {
-  font-size: 11px;
-  color: #94a3b8;
-}
-
-.mono {
-  font-family: ui-monospace, monospace;
-}
-
-.empty {
-  padding: 24px;
-  text-align: center;
-  color: #94a3b8;
-}
-</style>

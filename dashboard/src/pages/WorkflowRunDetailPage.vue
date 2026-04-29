@@ -30,14 +30,23 @@ async function cancel() {
 </script>
 
 <template>
-  <div v-if="data && data.run" class="run-detail">
-    <header>
-      <button @click="router.back()">&laquo; Back</button>
+  <div v-if="data && data.run">
+    <header class="flex items-center gap-3 mb-4">
+      <button
+        @click="router.back()"
+        class="px-3 py-1 text-sm bg-white text-slate-800 border border-slate-300 rounded
+               hover:border-primary hover:bg-slate-50
+               transition-colors duration-150 cursor-pointer"
+      >&laquo; Back</button>
       <h2>{{ data.run.name }}</h2>
-      <div class="meta">
+      <div class="flex items-center gap-3">
         <strong>Workflow:</strong> {{ data.run.workflow }} (v{{ data.run.definition_version }})
         <StatusBadge :status="data.run.status" />
-        <button v-if="canCancel" @click="cancel" class="cancel-btn">Cancel run</button>
+        <button
+          v-if="canCancel"
+          @click="cancel"
+          class="px-3 py-1.5 bg-danger text-white border-0 rounded cursor-pointer"
+        >Cancel run</button>
       </div>
     </header>
 
@@ -48,16 +57,25 @@ async function cancel() {
 
     <section>
       <h3>Step runs</h3>
-      <table>
-        <thead><tr><th>Step</th><th>Type</th><th>Status</th><th>Started</th><th>Finished</th><th>Job</th></tr></thead>
+      <table class="w-full border-collapse text-xs">
+        <thead>
+          <tr>
+            <th class="text-left px-2 py-1.5 border-b border-slate-200">Step</th>
+            <th class="text-left px-2 py-1.5 border-b border-slate-200">Type</th>
+            <th class="text-left px-2 py-1.5 border-b border-slate-200">Status</th>
+            <th class="text-left px-2 py-1.5 border-b border-slate-200">Started</th>
+            <th class="text-left px-2 py-1.5 border-b border-slate-200">Finished</th>
+            <th class="text-left px-2 py-1.5 border-b border-slate-200">Job</th>
+          </tr>
+        </thead>
         <tbody>
           <tr v-for="s in data.steps" :key="s.name">
-            <td>{{ s.step_id }}</td>
-            <td>{{ s.is_compensation ? 'compensation' : 'forward' }}</td>
-            <td><StatusBadge :status="s.status" /></td>
-            <td>{{ s.started_at || '—' }}</td>
-            <td>{{ s.finished_at || '—' }}</td>
-            <td>
+            <td class="px-2 py-1.5 border-b border-slate-200">{{ s.step_id }}</td>
+            <td class="px-2 py-1.5 border-b border-slate-200">{{ s.is_compensation ? 'compensation' : 'forward' }}</td>
+            <td class="px-2 py-1.5 border-b border-slate-200"><StatusBadge :status="s.status" /></td>
+            <td class="px-2 py-1.5 border-b border-slate-200">{{ s.started_at || '—' }}</td>
+            <td class="px-2 py-1.5 border-b border-slate-200">{{ s.finished_at || '—' }}</td>
+            <td class="px-2 py-1.5 border-b border-slate-200">
               <router-link v-if="s.job" :to="`/jobs/${s.job}`">{{ s.job }}</router-link>
               <span v-else>—</span>
             </td>
@@ -68,15 +86,7 @@ async function cancel() {
 
     <section v-if="data.run.last_error">
       <h3>Last error</h3>
-      <pre>{{ data.run.last_error }}</pre>
+      <pre class="bg-slate-100 p-3 overflow-x-auto">{{ data.run.last_error }}</pre>
     </section>
   </div>
 </template>
-
-<style scoped>
-.run-detail header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
-.cancel-btn { background: #ef4444; color: white; border: 0; padding: 6px 12px; border-radius: 4px; }
-table { width: 100%; border-collapse: collapse; }
-th, td { padding: 6px 10px; border-bottom: 1px solid #eee; text-align: left; }
-pre { background: #f3f4f6; padding: 12px; overflow-x: auto; }
-</style>

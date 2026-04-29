@@ -1,105 +1,164 @@
 <template>
-  <div class="dlq-page">
-    <div class="master">
-      <div class="filters">
-        <select v-model="filters.status">
+  <div class="flex gap-4 h-[calc(100vh-100px)]">
+    <div class="flex-1 min-w-0 flex flex-col">
+      <div class="flex gap-2 mb-3">
+        <select
+          v-model="filters.status"
+          class="px-2 py-1 border border-slate-300 rounded text-sm"
+        >
           <option value="">All statuses</option>
           <option value="PENDING_REVIEW">Pending review</option>
           <option value="RETRIED">Retried</option>
           <option value="DISCARDED">Discarded</option>
         </select>
-        <input v-model="filters.queue" placeholder="queue" />
-        <button @click="reload">Refresh</button>
+        <input
+          v-model="filters.queue"
+          placeholder="queue"
+          class="px-2 py-1 border border-slate-300 rounded text-sm"
+        />
+        <button
+          @click="reload"
+          class="px-3 py-1 text-sm bg-white text-slate-800 border border-slate-300 rounded
+                 hover:border-primary hover:bg-slate-50 active:bg-blue-50
+                 disabled:opacity-50 disabled:cursor-not-allowed
+                 transition-colors duration-150 cursor-pointer"
+        >Refresh</button>
       </div>
 
-      <div v-if="selected.size > 0" class="bulk-bar">
+      <div v-if="selected.size > 0" class="flex gap-2 items-center p-2 bg-slate-100 rounded mb-2 text-sm">
         <span>{{ selected.size }} selected</span>
-        <button @click="onRetry" :disabled="!isOperator">Retry</button>
-        <button v-if="isSysMgr" @click="onDiscard">Discard</button>
-        <button v-if="isSysMgr && selected.size === 1 && currentSafe" @click="onOpenEdit">Edit &amp; retry…</button>
-        <button @click="clearSelection">Clear</button>
+        <button
+          @click="onRetry"
+          :disabled="!isOperator"
+          class="px-2.5 py-1 bg-primary text-white border-0 rounded cursor-pointer text-xs
+                 disabled:bg-slate-300 disabled:cursor-not-allowed"
+        >Retry</button>
+        <button
+          v-if="isSysMgr"
+          @click="onDiscard"
+          class="px-2.5 py-1 bg-primary text-white border-0 rounded cursor-pointer text-xs"
+        >Discard</button>
+        <button
+          v-if="isSysMgr && selected.size === 1 && currentSafe"
+          @click="onOpenEdit"
+          class="px-2.5 py-1 bg-primary text-white border-0 rounded cursor-pointer text-xs"
+        >Edit &amp; retry…</button>
+        <button
+          @click="clearSelection"
+          class="px-2.5 py-1 bg-primary text-white border-0 rounded cursor-pointer text-xs"
+        >Clear</button>
       </div>
 
-      <table class="dlq-list">
+      <table class="w-full border-collapse text-xs">
         <thead>
           <tr>
-            <th></th>
-            <th>Queue</th>
-            <th>Status</th>
-            <th>Attempts</th>
-            <th>Last error</th>
-            <th>Moved at</th>
+            <th class="text-left px-2 py-1.5 border-b border-slate-200"></th>
+            <th class="text-left px-2 py-1.5 border-b border-slate-200">Queue</th>
+            <th class="text-left px-2 py-1.5 border-b border-slate-200">Status</th>
+            <th class="text-left px-2 py-1.5 border-b border-slate-200">Attempts</th>
+            <th class="text-left px-2 py-1.5 border-b border-slate-200">Last error</th>
+            <th class="text-left px-2 py-1.5 border-b border-slate-200">Moved at</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="row in rows" :key="row.name" :class="{ active: row.name === entry_name }">
-            <td><input type="checkbox" :checked="selected.has(row.name)" @change="toggleSelect(row.name)" /></td>
-            <td @click="open(row.name)">{{ row.queue }}</td>
-            <td @click="open(row.name)">
+          <tr
+            v-for="row in rows"
+            :key="row.name"
+            :class="row.name === entry_name && 'bg-indigo-100'"
+          >
+            <td class="px-2 py-1.5 border-b border-slate-200">
+              <input type="checkbox" :checked="selected.has(row.name)" @change="toggleSelect(row.name)" />
+            </td>
+            <td class="px-2 py-1.5 border-b border-slate-200 cursor-pointer" @click="open(row.name)">{{ row.queue }}</td>
+            <td class="px-2 py-1.5 border-b border-slate-200 cursor-pointer" @click="open(row.name)">
               <StatusBadge :status="row.status" />
             </td>
-            <td @click="open(row.name)">{{ row.attempts }}</td>
-            <td @click="open(row.name)" class="mono">{{ row.last_error_type }}</td>
-            <td @click="open(row.name)" class="ts">{{ row.moved_at }}</td>
+            <td class="px-2 py-1.5 border-b border-slate-200 cursor-pointer" @click="open(row.name)">{{ row.attempts }}</td>
+            <td class="px-2 py-1.5 border-b border-slate-200 cursor-pointer font-mono" @click="open(row.name)">{{ row.last_error_type }}</td>
+            <td class="px-2 py-1.5 border-b border-slate-200 cursor-pointer text-2xs text-slate-500" @click="open(row.name)">{{ row.moved_at }}</td>
           </tr>
         </tbody>
       </table>
-      <div v-if="!rows.length" class="empty">No DLQ entries match.</div>
+      <div v-if="!rows.length" class="text-slate-400 p-3 text-center">No DLQ entries match.</div>
     </div>
 
-    <div class="detail" v-if="entry_name">
-      <div v-if="!detailEntry" class="empty">Loading…</div>
+    <div class="flex-1 min-w-0 border-l border-slate-300 pl-4 overflow-auto" v-if="entry_name">
+      <div v-if="!detailEntry" class="text-slate-400 p-3 text-center">Loading…</div>
       <div v-else>
-        <header>
+        <header class="flex gap-2 items-center mb-3 flex-wrap">
           <StatusBadge :status="detailEntry.status" />
           <span>· queue {{ detailEntry.queue }}</span>
           <span>· attempts {{ detailEntry.attempts }}</span>
-          <span class="ts">{{ detailEntry.moved_at }}</span>
+          <span class="text-2xs text-slate-500">{{ detailEntry.moved_at }}</span>
         </header>
 
-        <section>
-          <h4>Last error</h4>
-          <p class="error">{{ detailEntry.last_error_type }}: {{ detailEntry.last_error_message }}</p>
+        <section class="mt-4">
+          <h4 class="mb-2">Last error</h4>
+          <p class="text-red-800">{{ detailEntry.last_error_type }}: {{ detailEntry.last_error_message }}</p>
           <details v-if="detailEntry.last_traceback">
             <summary>Traceback</summary>
-            <pre class="tb">{{ detailEntry.last_traceback }}</pre>
+            <pre class="font-mono text-2xs bg-red-50 p-2 rounded max-h-96 overflow-auto">{{ detailEntry.last_traceback }}</pre>
           </details>
         </section>
 
-        <section>
-          <h4>
+        <section class="mt-4">
+          <h4 class="mb-2">
             Original payload
-            <span :class="['safety', detailEntry.is_json_safe ? 'safe' : 'unsafe']">
+            <span
+              :class="[
+                'text-2xs px-1.5 py-0.5 rounded ml-2',
+                detailEntry.is_json_safe ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800',
+              ]"
+            >
               {{ detailEntry.is_json_safe ? "JSON-safe ✓" : "non-JSON types — edit-and-retry not available" }}
             </span>
           </h4>
-          <h5>args</h5>
+          <h5 class="my-2 mb-1 text-xs text-slate-500">args</h5>
           <JsonViewer :value="detailEntry.payload_decoded?.args" />
-          <h5>kwargs</h5>
+          <h5 class="my-2 mb-1 text-xs text-slate-500">kwargs</h5>
           <JsonViewer :value="detailEntry.payload_decoded?.kwargs" />
         </section>
 
-        <section v-if="detailEntry.job">
-          <h4>Linked job</h4>
+        <section v-if="detailEntry.job" class="mt-4">
+          <h4 class="mb-2">Linked job</h4>
           <router-link :to="`/jobs/${detailEntry.job}`">{{ detailEntry.job }}</router-link>
         </section>
 
-        <section v-if="detailEntry.reviewed_by">
-          <h4>Review</h4>
-          <p>by <code>{{ detailEntry.reviewed_by }}</code> at <span class="ts">{{ detailEntry.reviewed_at }}</span></p>
+        <section v-if="detailEntry.reviewed_by" class="mt-4">
+          <h4 class="mb-2">Review</h4>
+          <p>by <code class="font-mono">{{ detailEntry.reviewed_by }}</code> at <span class="text-2xs text-slate-500">{{ detailEntry.reviewed_at }}</span></p>
           <p v-if="detailEntry.review_notes">{{ detailEntry.review_notes }}</p>
         </section>
 
-        <div class="actions">
-          <button @click="onRetrySingle" :disabled="!isOperator">Retry as-is</button>
-          <button v-if="isSysMgr" @click="onDiscardSingle">Discard</button>
-          <button v-if="isSysMgr && detailEntry.is_json_safe" @click="onOpenEditSingle">Edit &amp; retry…</button>
+        <div class="mt-4 flex gap-2">
+          <button
+            @click="onRetrySingle"
+            :disabled="!isOperator"
+            class="px-3.5 py-1.5 bg-primary text-white border-0 rounded cursor-pointer
+                   disabled:bg-slate-300 disabled:cursor-not-allowed"
+          >Retry as-is</button>
+          <button
+            v-if="isSysMgr"
+            @click="onDiscardSingle"
+            class="px-3.5 py-1.5 bg-primary text-white border-0 rounded cursor-pointer"
+          >Discard</button>
+          <button
+            v-if="isSysMgr && detailEntry.is_json_safe"
+            @click="onOpenEditSingle"
+            class="px-3.5 py-1.5 bg-primary text-white border-0 rounded cursor-pointer"
+          >Edit &amp; retry…</button>
         </div>
       </div>
     </div>
 
-    <EditAndRetryModal v-if="editing" :entryName="editing.name" :initialArgs="editing.args"
-      :initialKwargs="editing.kwargs" @cancel="editing = null" @saved="onEditSaved" />
+    <EditAndRetryModal
+      v-if="editing"
+      :entryName="editing.name"
+      :initialArgs="editing.args"
+      :initialKwargs="editing.kwargs"
+      @cancel="editing = null"
+      @saved="onEditSaved"
+    />
   </div>
 </template>
 
@@ -259,175 +318,3 @@ async function onEditSaved(newId) {
   reload();
 }
 </script>
-
-<style scoped>
-.dlq-page {
-  display: flex;
-  gap: 16px;
-  height: calc(100vh - 100px);
-}
-
-.master {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.detail {
-  flex: 1;
-  min-width: 0;
-  border-left: 1px solid #ddd;
-  padding-left: 16px;
-  overflow: auto;
-}
-
-.filters {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.filters select,
-.filters input {
-  padding: 4px 8px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  font-size: 13px;
-}
-
-.bulk-bar {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  padding: 8px;
-  background: #f1f5f9;
-  border-radius: 4px;
-  margin-bottom: 8px;
-  font-size: 13px;
-}
-
-.bulk-bar button {
-  padding: 4px 10px;
-  background: #2563eb;
-  color: white;
-  border: 0;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.bulk-bar button:disabled {
-  background: #cbd5e1;
-  cursor: not-allowed;
-}
-
-.dlq-list {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 12px;
-}
-
-.dlq-list th,
-.dlq-list td {
-  text-align: left;
-  padding: 6px 8px;
-  border-bottom: 1px solid #eee;
-}
-
-.dlq-list tbody tr.active {
-  background: #e0e7ff;
-}
-
-.dlq-list tbody td {
-  cursor: pointer;
-}
-
-.mono {
-  font-family: ui-monospace, SFMono-Regular, monospace;
-}
-
-.ts {
-  font-size: 11px;
-  color: #64748b;
-}
-
-.empty {
-  color: #94a3b8;
-  padding: 12px;
-  text-align: center;
-}
-
-header {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 12px;
-  flex-wrap: wrap;
-}
-
-.error {
-  color: #991b1b;
-}
-
-.tb {
-  font-family: ui-monospace, monospace;
-  font-size: 11px;
-  background: #fee;
-  padding: 8px;
-  border-radius: 4px;
-  max-height: 400px;
-  overflow: auto;
-}
-
-.safety {
-  font-size: 11px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  margin-left: 8px;
-}
-
-.safety.safe {
-  background: #dcfce7;
-  color: #166534;
-}
-
-.safety.unsafe {
-  background: #fef3c7;
-  color: #854d0e;
-}
-
-section {
-  margin-top: 16px;
-}
-
-section h4 {
-  margin-bottom: 8px;
-}
-
-section h5 {
-  margin: 8px 0 4px;
-  font-size: 12px;
-  color: #64748b;
-}
-
-.actions {
-  margin-top: 16px;
-  display: flex;
-  gap: 8px;
-}
-
-.actions button {
-  padding: 6px 14px;
-  background: #2563eb;
-  color: white;
-  border: 0;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.actions button:disabled {
-  background: #cbd5e1;
-  cursor: not-allowed;
-}
-</style>
