@@ -1,0 +1,52 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "format:WR-{####}-{YYYY}",
+ "creation": "2026-04-29 00:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "workflow", "definition_version", "status", "site",
+  "section_input", "input_args", "input_kwargs",
+  "section_lifecycle", "started_at", "finished_at",
+  "section_meta", "idempotency_key", "cancelled_at", "cancelled_by",
+  "section_error", "last_error"
+ ],
+ "fields": [
+  {"fieldname": "workflow", "fieldtype": "Link", "options": "Conductor Workflow", "label": "Workflow", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "definition_version", "fieldtype": "Int", "label": "Definition Version", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "status", "fieldtype": "Select", "label": "Status",
+   "options": "PENDING\nRUNNING\nCOMPENSATING\nSUCCEEDED\nFAILED\nCANCELLED",
+   "default": "PENDING", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "site", "fieldtype": "Data", "label": "Site"},
+
+  {"fieldname": "section_input", "fieldtype": "Section Break", "label": "Input"},
+  {"fieldname": "input_args", "fieldtype": "Long Text", "label": "Input Args (msgpack-base64)"},
+  {"fieldname": "input_kwargs", "fieldtype": "Long Text", "label": "Input Kwargs (msgpack-base64)"},
+
+  {"fieldname": "section_lifecycle", "fieldtype": "Section Break", "label": "Lifecycle"},
+  {"fieldname": "started_at", "fieldtype": "Datetime", "label": "Started At"},
+  {"fieldname": "finished_at", "fieldtype": "Datetime", "label": "Finished At"},
+
+  {"fieldname": "section_meta", "fieldtype": "Section Break", "label": "Metadata"},
+  {"fieldname": "idempotency_key", "fieldtype": "Data", "label": "Idempotency Key"},
+  {"fieldname": "cancelled_at", "fieldtype": "Datetime", "label": "Cancelled At"},
+  {"fieldname": "cancelled_by", "fieldtype": "Link", "options": "User", "label": "Cancelled By"},
+
+  {"fieldname": "section_error", "fieldtype": "Section Break", "label": "Error"},
+  {"fieldname": "last_error", "fieldtype": "Long Text", "label": "Last Error"}
+ ],
+ "links": [],
+ "modified": "2026-04-29 00:00:00",
+ "modified_by": "Administrator",
+ "module": "Conductor",
+ "name": "Conductor Workflow Run",
+ "owner": "Administrator",
+ "permissions": [
+  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1, "report": 1, "export": 1},
+  {"role": "Conductor Operator", "read": 1, "report": 1, "export": 1}
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "track_changes": 1
+}
