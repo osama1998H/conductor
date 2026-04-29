@@ -35,7 +35,8 @@ async function cancel() {
       <button
         @click="router.back()"
         class="px-3 py-1 text-sm bg-white text-slate-800 border border-slate-300 rounded
-               hover:border-primary hover:bg-slate-50 cursor-pointer"
+               hover:border-primary hover:bg-slate-50
+               transition-colors duration-150 cursor-pointer"
       >&laquo; Back</button>
       <h2>{{ data.run.name }}</h2>
       <div class="flex items-center gap-3">
@@ -44,7 +45,7 @@ async function cancel() {
         <button
           v-if="canCancel"
           @click="cancel"
-          class="px-3 py-1.5 bg-red-500 text-white border-0 rounded cursor-pointer"
+          class="px-3 py-1.5 bg-danger text-white border-0 rounded cursor-pointer"
         >Cancel run</button>
       </div>
     </header>
@@ -56,25 +57,25 @@ async function cancel() {
 
     <section>
       <h3>Step runs</h3>
-      <table class="w-full border-collapse">
+      <table class="w-full border-collapse text-xs">
         <thead>
           <tr>
-            <th class="text-left px-2.5 py-1.5 border-b border-slate-200">Step</th>
-            <th class="text-left px-2.5 py-1.5 border-b border-slate-200">Type</th>
-            <th class="text-left px-2.5 py-1.5 border-b border-slate-200">Status</th>
-            <th class="text-left px-2.5 py-1.5 border-b border-slate-200">Started</th>
-            <th class="text-left px-2.5 py-1.5 border-b border-slate-200">Finished</th>
-            <th class="text-left px-2.5 py-1.5 border-b border-slate-200">Job</th>
+            <th class="text-left px-2 py-1.5 border-b border-slate-200">Step</th>
+            <th class="text-left px-2 py-1.5 border-b border-slate-200">Type</th>
+            <th class="text-left px-2 py-1.5 border-b border-slate-200">Status</th>
+            <th class="text-left px-2 py-1.5 border-b border-slate-200">Started</th>
+            <th class="text-left px-2 py-1.5 border-b border-slate-200">Finished</th>
+            <th class="text-left px-2 py-1.5 border-b border-slate-200">Job</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="s in data.steps" :key="s.name">
-            <td class="px-2.5 py-1.5 border-b border-slate-200">{{ s.step_id }}</td>
-            <td class="px-2.5 py-1.5 border-b border-slate-200">{{ s.is_compensation ? 'compensation' : 'forward' }}</td>
-            <td class="px-2.5 py-1.5 border-b border-slate-200"><StatusBadge :status="s.status" /></td>
-            <td class="px-2.5 py-1.5 border-b border-slate-200">{{ s.started_at || '—' }}</td>
-            <td class="px-2.5 py-1.5 border-b border-slate-200">{{ s.finished_at || '—' }}</td>
-            <td class="px-2.5 py-1.5 border-b border-slate-200">
+            <td class="px-2 py-1.5 border-b border-slate-200">{{ s.step_id }}</td>
+            <td class="px-2 py-1.5 border-b border-slate-200">{{ s.is_compensation ? 'compensation' : 'forward' }}</td>
+            <td class="px-2 py-1.5 border-b border-slate-200"><StatusBadge :status="s.status" /></td>
+            <td class="px-2 py-1.5 border-b border-slate-200">{{ s.started_at || '—' }}</td>
+            <td class="px-2 py-1.5 border-b border-slate-200">{{ s.finished_at || '—' }}</td>
+            <td class="px-2 py-1.5 border-b border-slate-200">
               <router-link v-if="s.job" :to="`/jobs/${s.job}`">{{ s.job }}</router-link>
               <span v-else>—</span>
             </td>
