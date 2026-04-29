@@ -72,8 +72,9 @@ with DB **2** forced.
 
 ## Status
 
-Phase 4 of 5 (Phase 4 was Observability — removed; Phase 5 (Workflows)
-shipped 2026-04-29). Phase 6 — Multi-tenant polish — remains. See
+Phase 6 of 6 — final phase of v1 (Phase 4 was Observability — removed;
+Phase 5 (Workflows) shipped 2026-04-29; Phase 6 (Multi-tenant polish)
+shipped 2026-04-29). See
 `docs/superpowers/specs/2026-04-27-conductor-master-design.md` for the
 full roadmap.
 
@@ -153,6 +154,50 @@ $ bench --site SITE conductor workflow cancel <run_id>
 ```
 
 Dashboard tab: `/conductor-dashboard#/workflows` — Mermaid DAG visualization with per-step status colors, run history, cancel-run action (operator-gated).
+
+## Multi-tenant deployments (Phase 6)
+
+Conductor supports two worker shapes:
+
+```bash
+# Single-site (existing behavior — bench --site provides the site):
+bench --site=alpha.tenant.example.com conductor worker --queue default --concurrency 4
+
+# Pool mode — one process serves N sites:
+bench conductor worker --sites=auto --queue default --concurrency 8
+bench conductor worker --sites=alpha.test,beta.test --queue default --concurrency 8
+```
+
+`--sites=auto` walks `sites/<dir>/site_config.json` and keeps sites with `conductor` in `installed_apps`. The site list is resolved once at boot — onboarding a new tenant requires restarting the pool worker.
+
+### Per-tenant rate limits and concurrency caps
+
+Two new fields on each `Conductor Queue` row:
+
+| Field | Default | Meaning |
+|---|---|---|
+| `max_rps` | `0` (unlimited) | Tokens per second, enforced by an atomic Redis Lua bucket on `conductor:{site}:rate:{queue}` |
+| `max_concurrent` | `0` (unlimited) | Cap on simultaneously RUNNING jobs across the worker fleet, enforced on `conductor:{site}:inflight:{queue}` |
+
+Throttled jobs are NOT failures — they land in `SCHEDULED_RETRY` with `last_error_message="rate_limited"` or `"inflight_capped"`, ride the existing Phase 2 delay loop, and rejoin the queue when capacity returns. The dashboard shows a count of throttled jobs alongside actual retries.
+
+### Operational subcommands
+
+```bash
+# Per-(site, queue) depth snapshot:
+bench --site=alpha.test conductor depth
+bench conductor depth --all-sites
+
+# DLQ triage:
+bench --site=alpha.test conductor dlq list --queue default
+bench --site=alpha.test conductor dlq retry --queue default --limit 50
+bench --site=alpha.test conductor dlq discard --job <job_id>
+
+# RQ → Conductor migration (idempotent via Redis marker):
+bench --site=alpha.test conductor migrate-from-rq               # dry-run preview
+bench --site=alpha.test conductor migrate-from-rq --commit      # actually move
+bench --site=alpha.test conductor migrate-from-rq --commit --force  # ignore prior marker
+```
 
 ## Dashboard (Phase 3)
 

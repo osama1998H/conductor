@@ -25,17 +25,19 @@ SITE = "frappe.localhost"
 
 @pytest.fixture
 def rate_limit_set():
-    """Set max_rps=10 for 'default'; reset to 0 in teardown."""
-    q = frappe.get_doc("Conductor Queue", "default")
-    original_rps = int(q.max_rps or 0)
-    q.max_rps = 10
-    q.save(ignore_permissions=True)
+    """Set max_rps=10 for 'default'; reset to 0 in teardown.
+
+    Uses frappe.db.set_value + clear_document_cache rather than `q.save()`
+    because q.save() has been observed to leave a stale Redis-side cached
+    doc that worker subprocesses read before seeing the new value."""
+    original_rps = int(frappe.db.get_value("Conductor Queue", "default", "max_rps") or 0)
+    frappe.db.set_value("Conductor Queue", "default", "max_rps", 10)
     frappe.db.commit()
+    frappe.clear_document_cache("Conductor Queue", "default")
     yield
-    q = frappe.get_doc("Conductor Queue", "default")
-    q.max_rps = original_rps
-    q.save(ignore_permissions=True)
+    frappe.db.set_value("Conductor Queue", "default", "max_rps", original_rps)
     frappe.db.commit()
+    frappe.clear_document_cache("Conductor Queue", "default")
 
 
 def _parse_job_id(raw: bytes) -> str:

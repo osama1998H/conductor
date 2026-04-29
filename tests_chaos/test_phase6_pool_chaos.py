@@ -26,9 +26,26 @@ def _site_exists(site: str) -> bool:
     return (BENCH_ROOT / "sites" / site / "site_config.json").is_file()
 
 
+def _conductor_installed(site: str) -> bool:
+    """Verify the site has conductor in its installed_apps. A site dir
+    can exist (from a previously-failed `bench new-site`) without conductor
+    actually being installed — those leftovers must not be reused."""
+    try:
+        out = subprocess.check_output(
+            ["bench", "--site", site, "execute", "frappe.get_installed_apps"],
+            cwd=str(BENCH_ROOT), timeout=30, stderr=subprocess.DEVNULL,
+        )
+        return b"conductor" in out
+    except Exception:
+        return False
+
+
 def _create_site(site: str) -> bool:
-    if _site_exists(site):
+    if _site_exists(site) and _conductor_installed(site):
         return True
+    if _site_exists(site):
+        # Stale leftover from a previously-failed run — clean it before retrying.
+        shutil.rmtree(BENCH_ROOT / "sites" / site, ignore_errors=True)
     cmd = [
         "bench", "new-site", site,
         "--admin-password", "admin",
@@ -39,6 +56,8 @@ def _create_site(site: str) -> bool:
         subprocess.run(cmd, cwd=str(BENCH_ROOT), check=True, capture_output=True, timeout=300)
     except Exception as e:
         print(f"site creation failed for {site}: {e}")
+        # Failed `bench new-site` may have left a partial dir — sweep it.
+        shutil.rmtree(BENCH_ROOT / "sites" / site, ignore_errors=True)
         return False
     return True
 
