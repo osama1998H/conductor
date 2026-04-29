@@ -38,6 +38,10 @@ from conductor.retry import RetryPolicy
 from conductor.scheduled import schedule_message
 from conductor.streams import CONSUMER_GROUP, dlq_key, ensure_consumer_group, stream_key
 
+# Import demo workflows so they're registered at worker startup.
+# Workflows are registered at module import time via @workflow decorator.
+import conductor.demo  # noqa: F401
+
 log = get_logger("conductor.worker")
 
 _HEARTBEAT_SECS = 5
@@ -373,8 +377,27 @@ def _handle_one(
                             is_compensation=is_comp,
                         )
 
-                    func = frappe.get_attr(msg.method)
-                    result = func(**msg.kwargs)
+                    # Phase 5: For workflow steps, instantiate the class and call the method as an instance method.
+                    if msg.workflow_run_id and msg.step_id:
+                        # msg.method is "package.module.ClassName.method_name"
+                        # Split off the last two parts (ClassName.method_name)
+                        parts = msg.method.rsplit(".", 2)
+                        if len(parts) == 3:
+                            module_name, class_name, method_name = parts
+                            module = importlib.import_module(module_name)
+                            cls = getattr(module, class_name)
+                            instance = cls()  # instantiate the workflow class
+                            method = getattr(instance, method_name)
+                            # Clean up workflow-internal kwargs before calling the method
+                            clean_kwargs = {k: v for k, v in msg.kwargs.items() if not k.startswith("__")}
+                            result = method(**clean_kwargs)
+                        else:
+                            # Fallback to regular function lookup if method path doesn't have enough parts
+                            func = frappe.get_attr(msg.method)
+                            result = func(**msg.kwargs)
+                    else:
+                        func = frappe.get_attr(msg.method)
+                        result = func(**msg.kwargs)
                 succeeded = True
             except BaseException as e:
                 exc = e

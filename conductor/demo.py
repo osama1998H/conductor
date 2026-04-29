@@ -28,3 +28,31 @@ def slow_chaos(**kwargs: Any) -> dict:
     import time
     time.sleep(8)
     return {"completed": True}
+
+
+# Phase 5 chaos demo workflow — must live here so worker subprocesses can
+# import the class via frappe.get_attr (the test process cannot give the
+# worker a class defined inside a test function).
+from conductor.workflow import Step, workflow
+
+
+@workflow(name="DemoDiamond", queue="default")
+class DemoDiamond:
+    """Diamond DAG: a → {b, c} → d. Used by Phase 5 chaos tests."""
+
+    _a = Step("a")
+    _b = Step("b", depends_on=("a",))
+    _c = Step("c", depends_on=("a",))
+    _d = Step("d", depends_on=("b", "c"))
+
+    def a(self, **kwargs: Any) -> None:
+        pass
+
+    def b(self, **kwargs: Any) -> None:
+        pass
+
+    def c(self, **kwargs: Any) -> None:
+        pass
+
+    def d(self, **kwargs: Any) -> None:
+        pass

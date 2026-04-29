@@ -137,6 +137,10 @@ def enqueue(
         log.info("dispatch_idempotency_hit", method=method, idem_key=idem_key, existing_job_id=existing)
         return existing
 
+    # Phase 5: Extract workflow metadata from kwargs if present
+    workflow_run_id = kwargs.pop("__workflow_run_id", "")
+    step_id = kwargs.pop("__step_id", "")
+
     msg = JobMessage(
         job_id=job_id,
         site=site,
@@ -150,8 +154,8 @@ def enqueue(
         enqueued_at=enqueued_at,
         deadline=deadline,
         idempotency_key=idem_key,
-        workflow_run_id="",
-        step_id="",
+        workflow_run_id=workflow_run_id,
+        step_id=step_id,
         backoff=policy.backoff,
         base_delay_seconds=policy.base_delay_seconds,
         max_delay_seconds=policy.max_delay_seconds,
