@@ -153,3 +153,56 @@ def test_unmapped_rq_queue_falls_back_to_default(fake_redis):
     assert rep.moved == 1
     assert enq == [("x.y", "default")]
     assert rep.unmapped_queues_seen == {"long_q_unmapped": 1}
+
+
+def test_cli_dry_run_default():
+    """`bench conductor migrate-from-rq` without --commit is dry-run."""
+    from click.testing import CliRunner
+    from conductor.commands.migrate_rq import migrate_rq_command
+    from conductor.migrate_rq import MigrationReport
+
+    fake_rep = MigrationReport(site="alpha.test")
+    fake_rep.plan = [{"rq_job_id": "x", "rq_queue": "default",
+                      "method": "demo.foo", "target_queue": "default"}]
+    with patch("conductor.commands.migrate_rq.migrate_from_rq",
+               return_value=fake_rep) as mock_mig, \
+         patch("conductor.commands.migrate_rq._init_site"), \
+         patch("conductor.commands.migrate_rq._destroy_site"):
+        runner = CliRunner()
+        result = runner.invoke(migrate_rq_command, ["--site", "alpha.test"])
+    assert result.exit_code == 0, result.output
+    assert mock_mig.call_args.kwargs["commit"] is False
+    assert "DRY RUN" in result.output
+
+
+def test_cli_commit_passes_force_flag():
+    from click.testing import CliRunner
+    from conductor.commands.migrate_rq import migrate_rq_command
+    from conductor.migrate_rq import MigrationReport
+    fake_rep = MigrationReport(site="alpha.test")
+    with patch("conductor.commands.migrate_rq.migrate_from_rq",
+               return_value=fake_rep) as mock_mig, \
+         patch("conductor.commands.migrate_rq._init_site"), \
+         patch("conductor.commands.migrate_rq._destroy_site"):
+        runner = CliRunner()
+        result = runner.invoke(migrate_rq_command, [
+            "--site", "alpha.test", "--commit", "--force",
+        ], input="y\n")
+    assert result.exit_code == 0, result.output
+    assert mock_mig.call_args.kwargs["commit"] is True
+    assert mock_mig.call_args.kwargs["force"] is True
+
+
+def test_cli_queue_map_parsing():
+    from click.testing import CliRunner
+    from conductor.commands.migrate_rq import migrate_rq_command, _parse_queue_map
+    assert _parse_queue_map(None) == {"short": "short", "default": "default", "long": "long"}
+    assert _parse_queue_map("rq1=conductor1,rq2=long") == {
+        "rq1": "conductor1", "rq2": "long",
+    }
+
+
+def test_cli_queue_map_invalid_raises():
+    from conductor.commands.migrate_rq import _parse_queue_map
+    with pytest.raises(ValueError):
+        _parse_queue_map("just_one_no_equals")
