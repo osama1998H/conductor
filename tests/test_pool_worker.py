@@ -312,3 +312,28 @@ def test_throttle_gate_short_circuits_when_both_limits_zero(monkeypatch, fake_re
     )
     assert allowed is True
     assert take_token_called == []
+
+
+def test_pool_cancel_pollers_one_per_site_share_event_map():
+    """Pool mode runs N CancelPoller threads, all writing into the same
+    process-global cancel_events map. Construction is what we test here;
+    the live polling is verified by the chaos suite."""
+    from conductor.worker import _make_pool_cancel_pollers, _cancel_events, _cancel_events_lock
+    pollers = _make_pool_cancel_pollers(
+        worker_id="host:1234:abc",
+        sites=["alpha.test", "beta.test", "gamma.test"],
+        sites_path="/tmp/sites",
+    )
+    try:
+        assert len(pollers) == 3
+        # Same shared map and lock referenced by every poller
+        for p in pollers:
+            assert p._cancel_events is _cancel_events
+            assert p._lock is _cancel_events_lock
+        # Sites all distinct
+        seen_sites = {p._site for p in pollers}
+        assert seen_sites == {"alpha.test", "beta.test", "gamma.test"}
+    finally:
+        # Don't actually start them in the test -- the start() side-effect
+        # would try to talk to Frappe on those non-existent sites.
+        pass

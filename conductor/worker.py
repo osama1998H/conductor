@@ -438,6 +438,23 @@ _cancel_events: dict[str, threading.Event] = {}
 _cancel_events_lock = threading.Lock()
 
 
+def _make_pool_cancel_pollers(
+    *,
+    worker_id: str,
+    sites: list[str],
+    sites_path: str,
+) -> list[CancelPoller]:
+    """Construct one CancelPoller per site; all pollers share the
+    process-global `_cancel_events` map and `_cancel_events_lock`."""
+    return [
+        CancelPoller(
+            worker_id, site, sites_path,
+            _cancel_events, _cancel_events_lock,
+        )
+        for site in sites
+    ]
+
+
 def _resolve_queue_limits(queue: str) -> tuple[int, int]:
     """Read (max_rps, max_concurrent) from the Conductor Queue cached doc.
     Both default to 0 (unlimited). Frappe's get_cached_doc invalidates on
@@ -815,11 +832,11 @@ def run_worker_pool(
     streams = _build_streams_dict(r, sites, queues)
 
     pool = ThreadPoolExecutor(max_workers=concurrency, thread_name_prefix="conductor-")
-    # Task 9 will replace this with per-site CancelPollers.
-    cancel_poller = CancelPoller(
-        worker_id, primary_site, sites_path, _cancel_events, _cancel_events_lock,
+    pollers = _make_pool_cancel_pollers(
+        worker_id=worker_id, sites=sites, sites_path=sites_path,
     )
-    cancel_poller.start()
+    for p in pollers:
+        p.start()
 
     last_beat = 0.0
     try:
@@ -845,7 +862,8 @@ def run_worker_pool(
                 time.sleep(1)
     finally:
         log_ctx.info("worker_shutting_down", grace_seconds=grace_seconds)
-        cancel_poller.stop()
+        for p in pollers:
+            p.stop()
         pool.shutdown(wait=True)
         _mark_worker_gone_pool(
             worker_id,
