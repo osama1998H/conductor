@@ -4,6 +4,7 @@ import click
 
 from conductor.commands.cancel import cancel_command
 from conductor.commands.depth import depth_command
+from conductor.commands.dlq import dlq_group
 from conductor.commands.doctor import doctor_command
 from conductor.commands.schedule import schedule_group
 from conductor.commands.scheduler import scheduler_command
@@ -23,6 +24,7 @@ conductor_group.add_command(scheduler_command)
 conductor_group.add_command(schedule_group)
 conductor_group.add_command(workflow_group)
 conductor_group.add_command(depth_command)
+conductor_group.add_command(dlq_group)
 
 
 commands = [conductor_group]
