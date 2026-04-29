@@ -362,6 +362,17 @@ def _handle_one(
             try:
                 with set_context(job_id=msg.job_id, attempt=msg.attempt, deadline=msg.deadline, cancel_event=cancel_event):
                     _set_job_running(msg.job_id, worker_id)
+
+                    # Phase 5 hook — mark workflow step RUNNING if applicable.
+                    if msg.workflow_run_id and msg.step_id:
+                        from conductor.workflow.worker_hooks import mark_step_running
+                        is_comp = bool(msg.kwargs.get("__is_compensation"))
+                        mark_step_running(
+                            workflow_run_id=msg.workflow_run_id,
+                            step_id=msg.step_id,
+                            is_compensation=is_comp,
+                        )
+
                     func = frappe.get_attr(msg.method)
                     result = func(**msg.kwargs)
                 succeeded = True
@@ -384,6 +395,16 @@ def _handle_one(
                 _set_job_succeeded(msg.job_id, result)
                 _write_job_run_row(msg, worker_id, status="SUCCEEDED", started_at=started_at, finished_at=finished_at)
                 log.info("job_succeeded", job_id=msg.job_id)
+
+                if msg.workflow_run_id and msg.step_id:
+                    from conductor.workflow.worker_hooks import mark_step_terminal
+                    from conductor.workflow.advancer import enqueue_advance
+                    is_comp = bool(msg.kwargs.get("__is_compensation"))
+                    mark_step_terminal(
+                        workflow_run_id=msg.workflow_run_id, step_id=msg.step_id,
+                        is_compensation=is_comp, success=True,
+                    )
+                    enqueue_advance(msg.workflow_run_id, completed_step=msg.step_id)
 
             else:
                 policy = _resolve_policy_from_msg(msg)
@@ -411,6 +432,18 @@ def _handle_one(
                 else:
                     _move_to_dlq(msg, exc, redis_client, site, tb_str=exc_tb)
                     _write_job_run_row(msg, worker_id, status="FAILED", exc=exc, tb_str=exc_tb, started_at=started_at, finished_at=finished_at)
+
+                    if msg.workflow_run_id and msg.step_id:
+                        from conductor.workflow.worker_hooks import mark_step_terminal
+                        from conductor.workflow.advancer import enqueue_advance
+                        is_comp = bool(msg.kwargs.get("__is_compensation"))
+                        mark_step_terminal(
+                            workflow_run_id=msg.workflow_run_id, step_id=msg.step_id,
+                            is_compensation=is_comp, success=False,
+                            error_type=type(exc).__name__,
+                            error_message=str(exc),
+                        )
+                        enqueue_advance(msg.workflow_run_id, completed_step=msg.step_id)
                 log.error("job_failed", job_id=msg.job_id, attempt=msg.attempt)
 
             if watchdog:
