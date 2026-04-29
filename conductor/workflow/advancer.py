@@ -198,17 +198,33 @@ def _advance_compensation(run, just_completed: Optional[str]) -> None:
     if cls is None:
         return
 
-    # Wait for in-flight forward steps to settle.
+    # Skip un-dispatched forward steps (like cancellation does).
+    skip_targets = frappe.get_all(
+        "Conductor Workflow Step Run",
+        filters={
+            "workflow_run": workflow_run_id,
+            "is_compensation": 0,
+            "status": ["in", ["PENDING", "READY"]],
+        },
+        pluck="name",
+    )
+    for n in skip_targets:
+        frappe.db.set_value("Conductor Workflow Step Run", n, "status", "SKIPPED",
+                            update_modified=False)
+
+    # Wait for in-flight forward steps to settle (only RUNNING now, since we skipped PENDING/READY).
     in_flight = frappe.db.count(
         "Conductor Workflow Step Run",
         filters={
             "workflow_run": workflow_run_id,
             "is_compensation": 0,
-            "status": ["in", ["PENDING", "READY", "RUNNING"]],
+            "status": "RUNNING",
         },
     )
     if in_flight:
+        frappe.db.commit()
         return
+    frappe.db.commit()
 
     completed_forward = {
         r["step_id"] for r in frappe.get_all(

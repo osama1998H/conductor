@@ -56,3 +56,34 @@ class DemoDiamond:
 
     def d(self, **kwargs: Any) -> None:
         pass
+
+
+@workflow(name="DemoCompensatingDiamond", queue="default")
+class DemoCompensatingDiamond:
+    """Diamond DAG with compensations on a and b. Step c fails terminally
+    after retries. Used by the Phase 5 exit-criterion chaos test (master §4)."""
+
+    _a = Step("a", compensation="undo_a")
+    _b = Step("b", depends_on=("a",), compensation="undo_b")
+    _c = Step("c", depends_on=("a",))
+    _d = Step("d", depends_on=("b", "c"))
+
+    def a(self, **kwargs: Any) -> None:
+        pass
+
+    def undo_a(self, **kwargs: Any) -> None:
+        import frappe
+        frappe.cache().set_value("phase5:undo_a:ran", "1")
+
+    def b(self, **kwargs: Any) -> None:
+        pass
+
+    def undo_b(self, **kwargs: Any) -> None:
+        import frappe
+        frappe.cache().set_value("phase5:undo_b:ran", "1")
+
+    def c(self, **kwargs: Any) -> None:
+        raise RuntimeError("forced terminal failure for Phase 5 exit criterion")
+
+    def d(self, **kwargs: Any) -> None:
+        pass
