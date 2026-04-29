@@ -143,3 +143,172 @@ def test_heartbeat_pool_updates_every_site(monkeypatch):
         assert name == "host:1234:abc"
         assert payload["status"] == "ALIVE"
         assert "last_heartbeat" in payload
+
+
+def test_resolve_queue_limits_returns_zero_for_unlimited(monkeypatch):
+    """A Conductor Queue with max_rps=0 and max_concurrent=0 must short-circuit
+    the throttle gate — no Redis calls should fire."""
+    class FakeQueue:
+        max_rps = 0
+        max_concurrent = 0
+
+    import frappe
+    monkeypatch.setattr(frappe, "get_cached_doc",
+                        lambda doctype, name: FakeQueue(), raising=False)
+
+    from conductor.worker import _resolve_queue_limits
+    rps, conc = _resolve_queue_limits("default")
+    assert rps == 0
+    assert conc == 0
+
+
+def test_resolve_queue_limits_reads_int_fields(monkeypatch):
+    class FakeQueue:
+        max_rps = 25
+        max_concurrent = 7
+    import frappe
+    monkeypatch.setattr(frappe, "get_cached_doc",
+                        lambda doctype, name: FakeQueue(), raising=False)
+    from conductor.worker import _resolve_queue_limits
+    rps, conc = _resolve_queue_limits("default")
+    assert rps == 25
+    assert conc == 7
+
+
+def test_throttle_gate_inflight_denied_reschedules_without_consuming_token(monkeypatch, fake_redis):
+    """When max_concurrent is exceeded, the throttle gate must re-ZADD to
+    the delay set and NOT call take_token — token is preserved for callers
+    that actually run."""
+    from types import SimpleNamespace
+
+    take_token_called = []
+
+    def spy_take_token(*a, **k):
+        take_token_called.append(True)
+        return (True, 0)
+    monkeypatch.setattr("conductor.worker.take_token", spy_take_token, raising=False)
+
+    # Pre-fill inflight at cap
+    from conductor.inflight import acquire
+    for _ in range(2):
+        acquire(fake_redis, "alpha.test", "default", max_concurrent=2)
+
+    schedule_calls = []
+    def spy_schedule_message(client, site, encoded, run_at_ms):
+        schedule_calls.append((site, run_at_ms, dict(encoded)))
+    monkeypatch.setattr("conductor.worker.schedule_message",
+                        spy_schedule_message, raising=False)
+
+    db_calls = []
+    import frappe
+    stub_db = SimpleNamespace(
+        set_value=lambda *a, **k: db_calls.append((a, k)),
+        commit=lambda: None,
+    )
+    monkeypatch.setattr(frappe, "db", stub_db, raising=False)
+    monkeypatch.setattr("conductor.worker.emit_job_event",
+                        lambda *a, **k: None, raising=False)
+
+    from conductor.messages import JobMessage
+    from datetime import datetime, timezone
+    msg = JobMessage(
+        job_id="job-A", site="alpha.test", method="m", queue="default",
+        args=[], kwargs={}, attempt=1, max_attempts=3, timeout_seconds=60,
+        enqueued_at=datetime.now(timezone.utc),
+        deadline=datetime.now(timezone.utc),
+    )
+
+    from conductor.worker import _apply_throttle_gate
+    allowed = _apply_throttle_gate(
+        fake_redis, msg, site="alpha.test",
+        rps=10, conc=2, now_ms=1_700_000_000_000,
+    )
+    assert allowed is False
+    assert take_token_called == []  # rate limit NOT consulted
+    assert len(schedule_calls) == 1
+    site, _run_at_ms, encoded = schedule_calls[0]
+    assert site == "alpha.test"
+    # attempt unchanged (throttling, not retry)
+    assert encoded.get("attempt") == "1"
+
+
+def test_throttle_gate_rate_limit_denied_releases_inflight_and_reschedules(monkeypatch, fake_redis):
+    """Inflight acquired, then rate-limit rejects — the inflight slot must
+    be released so we don't leak it."""
+    from types import SimpleNamespace
+
+    monkeypatch.setattr("conductor.worker.take_token",
+                        lambda *a, **k: (False, 250), raising=False)
+    monkeypatch.setattr("conductor.worker.schedule_message",
+                        lambda *a, **k: None, raising=False)
+    import frappe
+    stub_db = SimpleNamespace(
+        set_value=lambda *a, **k: None,
+        commit=lambda: None,
+    )
+    monkeypatch.setattr(frappe, "db", stub_db, raising=False)
+    monkeypatch.setattr("conductor.worker.emit_job_event",
+                        lambda *a, **k: None, raising=False)
+
+    from conductor.inflight import get_count
+    from conductor.messages import JobMessage
+    from datetime import datetime, timezone
+    msg = JobMessage(
+        job_id="job-A", site="s", method="m", queue="default",
+        args=[], kwargs={}, attempt=1, max_attempts=3, timeout_seconds=60,
+        enqueued_at=datetime.now(timezone.utc),
+        deadline=datetime.now(timezone.utc),
+    )
+
+    from conductor.worker import _apply_throttle_gate
+    allowed = _apply_throttle_gate(
+        fake_redis, msg, site="s",
+        rps=10, conc=5, now_ms=1_700_000_000_000,
+    )
+    assert allowed is False
+    # Inflight was acquired (1) then released (back to 0)
+    assert get_count(fake_redis, "s", "default") == 0
+
+
+def test_throttle_gate_both_pass_returns_true_and_holds_inflight_slot(monkeypatch, fake_redis):
+    monkeypatch.setattr("conductor.worker.take_token",
+                        lambda *a, **k: (True, 0), raising=False)
+    from conductor.messages import JobMessage
+    from datetime import datetime, timezone
+    msg = JobMessage(
+        job_id="job-A", site="s", method="m", queue="default",
+        args=[], kwargs={}, attempt=1, max_attempts=3, timeout_seconds=60,
+        enqueued_at=datetime.now(timezone.utc),
+        deadline=datetime.now(timezone.utc),
+    )
+    from conductor.worker import _apply_throttle_gate
+    from conductor.inflight import get_count
+    allowed = _apply_throttle_gate(
+        fake_redis, msg, site="s",
+        rps=10, conc=3, now_ms=1_700_000_000_000,
+    )
+    assert allowed is True
+    assert get_count(fake_redis, "s", "default") == 1
+
+
+def test_throttle_gate_short_circuits_when_both_limits_zero(monkeypatch, fake_redis):
+    """When max_rps=0 and max_concurrent=0, no Redis calls should fire."""
+    take_token_called = []
+    monkeypatch.setattr("conductor.worker.take_token",
+                        lambda *a, **k: take_token_called.append(True) or (True, 0),
+                        raising=False)
+    from conductor.messages import JobMessage
+    from datetime import datetime, timezone
+    msg = JobMessage(
+        job_id="job-A", site="s", method="m", queue="default",
+        args=[], kwargs={}, attempt=1, max_attempts=3, timeout_seconds=60,
+        enqueued_at=datetime.now(timezone.utc),
+        deadline=datetime.now(timezone.utc),
+    )
+    from conductor.worker import _apply_throttle_gate
+    allowed = _apply_throttle_gate(
+        fake_redis, msg, site="s",
+        rps=0, conc=0, now_ms=1_700_000_000_000,
+    )
+    assert allowed is True
+    assert take_token_called == []

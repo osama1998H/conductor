@@ -32,8 +32,10 @@ from conductor.client import get_redis
 from conductor.config import load_config
 from conductor.context import set_context, start_watchdog
 from conductor.execution_lock import acquire_exec_lock, release_exec_lock
+from conductor.inflight import acquire as inflight_acquire, release as inflight_release
 from conductor.logging import get_logger, setup_logging
 from conductor.messages import JobMessage, decode, emit_job_event, encode
+from conductor.rate_limit import take_token
 from conductor.retry import RetryPolicy
 from conductor.scheduled import schedule_message
 from conductor.streams import CONSUMER_GROUP, dlq_key, ensure_consumer_group, stream_key
@@ -51,6 +53,7 @@ _AUTOCLAIM_IDLE_MS = int(os.environ.get("CONDUCTOR_TEST_AUTOCLAIM_IDLE_MS", "600
 # quickly and a reclaiming peer can proceed. Production default: timeout + 30s.
 _EXEC_LOCK_TTL_OVERRIDE = int(os.environ.get("CONDUCTOR_TEST_EXEC_LOCK_TTL_SECONDS", "0"))
 _RECLAIM_BATCH = 32
+_INFLIGHT_RETRY_BACKOFF_MS_DEFAULT = 1000
 
 
 def _now() -> datetime:
@@ -435,6 +438,96 @@ _cancel_events: dict[str, threading.Event] = {}
 _cancel_events_lock = threading.Lock()
 
 
+def _resolve_queue_limits(queue: str) -> tuple[int, int]:
+    """Read (max_rps, max_concurrent) from the Conductor Queue cached doc.
+    Both default to 0 (unlimited). Frappe's get_cached_doc invalidates on
+    document update so dashboard edits propagate within seconds."""
+    doc = frappe.get_cached_doc("Conductor Queue", queue)
+    return int(getattr(doc, "max_rps", 0) or 0), int(getattr(doc, "max_concurrent", 0) or 0)
+
+
+def _throttle_action(
+    redis_client,
+    msg: JobMessage,
+    site: str,
+    *,
+    reason: str,
+    retry_after_ms: int,
+) -> None:
+    """Re-ZADD the message into the delay set for `retry_after_ms` from now;
+    flip the Conductor Job row to SCHEDULED_RETRY without bumping attempt;
+    emit a realtime event with `reason` so the dashboard can distinguish
+    throttling from real retries."""
+    encoded = encode(msg)
+    next_run = _now() + timedelta(milliseconds=retry_after_ms)
+    run_at_ms = int(next_run.timestamp() * 1000)
+    schedule_message(redis_client, site, encoded, run_at_ms)
+    frappe.db.set_value(
+        "Conductor Job",
+        msg.job_id,
+        {
+            "status": "SCHEDULED_RETRY",
+            "next_run_at": next_run.replace(tzinfo=None),
+            "last_error_type": "Throttled",
+            "last_error_message": f"{reason}",
+        },
+        update_modified=False,
+    )
+    frappe.db.commit()
+    emit_job_event(
+        msg.job_id,
+        "SCHEDULED_RETRY",
+        attempt=msg.attempt,
+        max_attempts=msg.max_attempts,
+        next_run_at=next_run.replace(tzinfo=None).isoformat(),
+        reason=reason,
+    )
+
+
+def _apply_throttle_gate(
+    redis_client,
+    msg: JobMessage,
+    *,
+    site: str,
+    rps: int,
+    conc: int,
+    now_ms: int,
+) -> bool:
+    """Returns True if the job is allowed to run, False if it has been
+    re-scheduled. Inflight is checked first (free fail). On rate-limit
+    rejection after a successful inflight acquire, inflight is released."""
+    if rps <= 0 and conc <= 0:
+        return True
+
+    if conc > 0:
+        acquired, _cur = inflight_acquire(redis_client, site, msg.queue, max_concurrent=conc)
+        if not acquired:
+            _throttle_action(
+                redis_client, msg, site,
+                reason="inflight_capped",
+                retry_after_ms=_INFLIGHT_RETRY_BACKOFF_MS_DEFAULT,
+            )
+            return False
+
+    if rps > 0:
+        allowed, retry_ms = take_token(
+            redis_client, site, msg.queue,
+            max_tokens=rps, refill_per_sec=rps,
+            now_ms=now_ms, n=1,
+        )
+        if not allowed:
+            if conc > 0:
+                inflight_release(redis_client, site, msg.queue)  # don't leak slot
+            _throttle_action(
+                redis_client, msg, site,
+                reason="rate_limited",
+                retry_after_ms=max(retry_ms, 1),
+            )
+            return False
+
+    return True
+
+
 def _handle_one(
     stream_name: str,
     msg_id: bytes,
@@ -459,6 +552,16 @@ def _handle_one(
             log.info("exec_lock_held_by_peer", job_id=msg.job_id)
             redis_client.xack(stream_name, CONSUMER_GROUP, msg_id)
             return
+
+        # Phase 6 throttle gate: rate limit + concurrency cap.
+        # Resolved once per job so the success path can reference `conc`.
+        rps, conc = _resolve_queue_limits(msg.queue)
+        if rps > 0 or conc > 0:
+            now_ms = int(time.time() * 1000)
+            if not _apply_throttle_gate(redis_client, msg, site=site, rps=rps, conc=conc, now_ms=now_ms):
+                release_exec_lock(redis_client, site, msg.job_id, worker_id)
+                redis_client.xack(stream_name, CONSUMER_GROUP, msg_id)
+                return
 
         cancel_event = threading.Event()
         with _cancel_events_lock:
@@ -589,6 +692,8 @@ def _handle_one(
                 watchdog.cancel()
             with _cancel_events_lock:
                 _cancel_events.pop(msg.job_id, None)
+            if conc > 0:
+                inflight_release(redis_client, site, msg.queue)
             release_exec_lock(redis_client, site, msg.job_id, worker_id)
             redis_client.xack(stream_name, CONSUMER_GROUP, msg_id)
         finally:
