@@ -131,3 +131,14 @@ def test_decorator_exposes_steps_in_declaration_order():
     steps = W7.__conductor_workflow_steps__
     # Sorted by step name for determinism — see snapshot.py rationale.
     assert [s.name for s in steps] == ["a", "b"]
+
+
+def test_decorator_raises_on_dependency_cycle():
+    _clear_registry()
+    with pytest.raises(WorkflowDefinitionError, match="cycle"):
+        @workflow(name="W_cycle", queue="default")
+        class W_cycle:
+            _a = Step("a", depends_on=("b",))
+            _b = Step("b", depends_on=("a",))
+            def a(self): pass
+            def b(self): pass

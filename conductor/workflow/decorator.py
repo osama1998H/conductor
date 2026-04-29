@@ -77,6 +77,13 @@ def workflow(*, name: str, queue: str):
                         f"{step.name!r} not found on {cls.__name__}"
                     )
 
+        from conductor.workflow.topo import detect_cycle  # avoid circular import at module load
+        cycle = detect_cycle(steps_by_attr.values())
+        if cycle:
+            raise WorkflowDefinitionError(
+                f"workflow {name} has a dependency cycle: {' → '.join(cycle)}"
+            )
+
         for step in steps_by_attr.values():
             for dep in step.depends_on:
                 if dep not in seen_names:
