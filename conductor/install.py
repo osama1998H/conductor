@@ -13,6 +13,7 @@ DEFAULT_QUEUES = [
     {"queue_name": "short",    "concurrency": 4, "default_max_attempts": 3, "default_timeout": 60},
     {"queue_name": "long",     "concurrency": 2, "default_max_attempts": 3, "default_timeout": 3600},
     {"queue_name": "critical", "concurrency": 8, "default_max_attempts": 10, "default_timeout": 300},
+    {"queue_name": "workflow", "concurrency": 4, "default_max_attempts": 5, "default_timeout": 120},
 ]
 
 
