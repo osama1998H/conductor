@@ -44,7 +44,7 @@ These decisions are fixed across all phases. Per-phase brainstorms cannot reliti
 | 11 | Dispatch ordering (Phase 0) | Idempotency check → insert `Conductor Job` (status=`QUEUED`) → `XADD` → `publish_realtime` | Simplest correct path. The "DB succeeded but XADD failed" case marks the row `DISPATCH_FAILED`. |
 | 12 | Outbox pattern | **Deferred to Phase 1 brainstorm**, with a strong default of *not* introducing an outbox table (current design). | Real decision once we have retry/DLQ in scope. |
 | 13 | `frappe.enqueue` shim | Available from Phase 0 as opt-in (`override_whitelisted_methods` in client `hooks.py`); RQ keeps running in parallel | Lets one client app start migrating immediately after Phase 0. |
-| 14 | Multi-tenancy in v1 | Site-bound workers (`bench conductor worker --site=<site>`). Pool workers with site-context switching are a Phase 6 enhancement. | Simpler ops + isolation. |
+| 14 | Multi-tenancy in v1 | Site-bound workers (`bench conductor worker --site=<site>`) and pool workers (`bench conductor worker --sites=auto|A,B,C`) — single-site is the N=1 case of pool mode (Phase 6). Pool mode switches Frappe site context per job; no connection cache in v1 (deferred per §10 risk #2 to a benchmark-driven decision). | Simpler ops + isolation. |
 | 15 | Cluster vs standalone Redis | Standalone for v1; any Lua scripts must remain single-key so cluster compat is achievable later | YAGNI on Cluster; don't paint ourselves into a corner. |
 | 16 | Stream retention | `XADD … MAXLEN ~ 10000` per stream + 7-day periodic `XTRIM MINID` by reaper | Bounded memory, configurable per queue later. |
 | 17 | Args serialization | `msgpack` (base64 in stream value) for `args`/`kwargs`/`result` | Preserves Frappe types (datetimes, Decimals) JSON drops. |
@@ -142,7 +142,7 @@ Originally an "Observability" phase covering OpenTelemetry exporter wiring, Prom
 ### Phase 6 — Multi-tenant polish
 
 **Ships:**
-- Pool worker mode (`bench conductor worker --sites=auto --queues=default`): one worker process consumes from N per-site streams; switches Frappe site context per job with a connection cache.
+- Pool worker mode (`bench conductor worker --sites=auto|A,B,C --queues=default`): one worker process consumes from N per-site streams. Routes per-message site by **stream key** (operator-controlled), never by message fields. Switches Frappe site context per job via the existing `_handle_one` init/destroy pattern; **no connection cache in v1** — connection cost is benchmarked in this phase and a cache is added later only if data demands it (master §10 risk #2).
 - Per-tenant rate limits and concurrency caps (Redis token buckets keyed by `{site}:{queue}`).
 - `bench --site=<site> conductor migrate-from-rq` one-shot tool: copies pending RQ jobs into Conductor streams, leaves a marker so we don't double-import.
 - Operational subcommands: `dlq retry --queue critical --limit 100`, per-tenant queue depth dump.
@@ -372,7 +372,9 @@ conductor:{site}:idem:{hash}           # SET NX EX, value = job_id          [Pha
 conductor:{site}:lock:{job_id}         # SET NX EX, value = worker_id       [Phase 1+]
 conductor:{site}:workers               # HSET worker_id → last_heartbeat_iso
 conductor:{site}:scheduler:lock        # singleton lock, SET NX EX           [Phase 2+]
-conductor:{site}:rate:{queue}          # token bucket                        [Phase 6+]
+conductor:{site}:rate:{queue}          # token bucket: HASH {tokens, last_refill_ms}; PEXPIRE 60s [Phase 6]
+conductor:{site}:inflight:{queue}      # INCR/DECR concurrency counter, EXPIRE 1d                 [Phase 6]
+conductor:{site}:rq_migrated_at        # marker — set after a successful migrate-from-rq --commit [Phase 6]
 ```
 
 Per-stream consumer group is created lazily by the dispatcher (XGROUP CREATE … MKSTREAM) — first-write wins, ignore BUSYGROUP errors.
@@ -403,7 +405,7 @@ What every later phase can rely on:
 ## 10. Risks Tracked Across Phases
 
 1. **Outbox vs. dual-write** (decided in Phase 1 brainstorm). If we keep dual-write, document the failure mode for ops.
-2. **Frappe site context overhead** for pool workers — benchmark before Phase 6; may force per-site sub-process pool.
+2. **Frappe site context overhead** for pool workers — Phase 6 ships init/destroy-per-job and a non-gating benchmark (`tests/benchmarks/test_phase6_pool_throughput.py`); cache decision is data-driven post-Phase 6. If the benchmark reports per-job p50 init+destroy overhead > 10ms or > 30% of trivial-job duration, file a follow-up for a connection cache.
 3. **Hard timeout enforcement** — Python threads can't be force-killed. v1 uses cooperative cancellation + watchdog. If real hard-kill is needed, subprocess-per-job is a follow-up.
 4. **Lua scripts for atomic transitions** must stay single-key to keep cluster compatibility open (§3 #15).
 5. **Workflow definition drift mid-run** — pinned via §3 #20; need an alert when a run is using a stale pinned version.
@@ -441,3 +443,4 @@ For every phase 0…6:
 | 2026-04-28 | Phase 3 footnotes: UI delivery refined to `www/` route + standalone vite project; realtime event family settled as `conductor:job:{id}` with `doctype`/`docname` room scoping. | osama.m@aau.iq |
 | 2026-04-28 | **Phase 4 (Observability) removed.** OpenTelemetry exporter, Prometheus/OTLP metrics, structured trace-tagged logs, and Sentry integration are out of scope for v1. Conductor's responsibility is "reliability-first background jobs"; observability is a bench-wide concern best handled by a separate app. Code: removed `conductor.otel`, dropped `opentelemetry-*` runtime deps, stripped `trace_id`/`span_id`/`trace_parent`/`sentry_event_id`/`sentry_url` from DocType schemas, dispatcher, worker, scheduler, sweeper, stream message schema (§7), Redis topology (§8), inter-phase contracts (§9), and risks (§10). Python exception tracebacks (`last_traceback` / `traceback` fields) are **kept** — those are diagnostic data for the job platform itself, not observability instrumentation. Phase 5/6 numbering preserved (gap at Phase 4). | osama.m@aau.iq |
 | 2026-04-29 | **Phase 5 (Workflows) shipped.** Adds DAG workflow support: `Conductor Workflow`, `Conductor Workflow Run`, `Conductor Workflow Step Run` DocTypes (with §8.1–8.3 augmentations from the Phase 5 spec — `last_version_bumped_at`, `idempotency_key`, `cancelled_at`/`cancelled_by`, `is_compensation`, `error_type`/`error_message`). New Redis keys `conductor:{site}:wfdeps:{run_id}` (single-key Lua scope) and `conductor:{site}:wfidem:{hash}`. New `workflow` queue in default fixtures for advancer/compensator coordination. The `workflow_run_id` and `step_id` fields frozen in §7 are now populated by the dispatcher. Realtime events `conductor:workflow_run:{run_id}` use the same per-doc room scoping as Phase 3. Worker resolves `module.ClassName.method` paths by instantiating the workflow class and calling the method as an instance method. **Master Phase 5 exit criterion verified**: `tests_chaos/test_phase5_chaos.py::test_diamond_c_terminal_fail_compensates_a` — 4-step diamond with parallel B/C branches, C fails terminally → A's compensation runs in reverse-topo order → run lands FAILED. Passes in ~18s through real worker subprocesses. | osama.m@aau.iq |
+| 2026-04-29 | **Phase 6 (Multi-tenant polish) shipped.** Pool worker mode (`--sites=auto|A,B,C`) where single-site `--site=X` is the N=1 case; per-(site, queue) rate limits and concurrency caps via single-key Lua scripts (`conductor/rate_limit.lua`, `conductor/inflight.lua`) on Redis keys `conductor:{site}:rate:{queue}` and `conductor:{site}:inflight:{queue}`; `Conductor Queue` extended with `max_rps` and `max_concurrent` (both Int default 0 = unlimited). Throttled jobs ride the existing Phase 2 delay path with `reason="rate_limited"`/`"inflight_capped"` events; reaper drift-corrects the inflight counter when workers go GONE. New ops subcommands: `bench conductor depth [--all-sites]`, `dlq {list,retry,discard}`, `migrate-from-rq` (one-shot RQ migration with Redis marker idempotency). Master Phase 6 exit criterion verified: `tests_chaos/test_phase6_pool_chaos.py` (3 sites + kill-9 + peer reclaim — SKIPs cleanly when bench cannot create fixture sites), `test_phase6_rate_limit.py` (50 jobs at max_rps=10 land in 3.5–8.0s; observed 4.94s), `test_phase6_concurrency_cap.py` (10 jobs at max_concurrent=2, max RUNNING ≤ 2 throughout; observed 2). | osama.m@aau.iq |
