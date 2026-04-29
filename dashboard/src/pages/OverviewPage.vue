@@ -1,15 +1,15 @@
 <template>
-  <div class="overview-page">
-    <div v-if="!state" class="loading">Loading…</div>
+  <div class="px-2">
+    <div v-if="!state" class="p-6 text-center text-slate-400">Loading…</div>
     <div v-else>
-      <div class="cards">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <NumberCard :value="totalDepth" label="Total queue depth" @click="go('/jobs')" />
         <NumberCard :value="aliveWorkers" label="Active workers" @click="go('/workers')" />
         <NumberCard :value="dlqPending" label="DLQ pending review" @click="go('/dlq')" />
         <NumberCard :value="schedulesEnabled" label="Schedules enabled" @click="go('/schedules')" />
       </div>
 
-      <div class="charts">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <QueueChart title="Queue depth by queue" :data="queueDepthData" />
         <QueueChart title="DLQ status counts" :data="dlqData" />
       </div>
@@ -49,36 +49,3 @@ const dlqData = computed(() => {
 
 function go(path) { router.push(path); }
 </script>
-
-<style scoped>
-.overview-page {
-  padding: 0 8px;
-}
-
-.loading {
-  padding: 24px;
-  text-align: center;
-  color: #94a3b8;
-}
-
-.cards {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  margin-bottom: 24px;
-}
-
-.charts {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
-}
-
-@media (max-width: 768px) {
-
-  .cards,
-  .charts {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-</style>
