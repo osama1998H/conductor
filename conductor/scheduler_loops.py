@@ -22,6 +22,7 @@ except ImportError:  # pragma: no cover — only missing in pure-unit-test env
 
 from conductor.cron import compute_next_run_at
 from conductor.dispatcher import enqueue as conductor_enqueue
+from conductor.inflight import correct_drift
 from conductor.logging import get_logger
 from conductor.scheduled import drain_due_messages
 from conductor.serialization import loads as msgpack_loads
@@ -142,12 +143,24 @@ REAPER_GONE_AGE_SECONDS = 120
 REAPER_PRUNE_AGE_SECONDS = 7 * 24 * 3600
 
 
-def _reaper_loop_iter(site: str, frappe) -> None:
-    """One reaper pass: mark STALE/GONE based on heartbeat age, prune old rows."""
+def _reaper_loop_iter(site: str, frappe) -> list[str]:
+    """One reaper pass: mark STALE/GONE based on heartbeat age, prune old rows.
+
+    Returns the list of worker IDs flipped to GONE in this pass so the caller
+    can drift-correct their inflight counters (Phase 6)."""
     now = datetime.now()
     gone_cut = now - timedelta(seconds=REAPER_GONE_AGE_SECONDS)
     stale_cut = now - timedelta(seconds=REAPER_STALE_AGE_SECONDS)
     prune_cut = now - timedelta(seconds=REAPER_PRUNE_AGE_SECONDS)
+
+    # Phase 6: capture the worker IDs about to flip GONE before mutating.
+    just_gone_rows = frappe.db.sql(
+        "SELECT worker_id FROM `tabConductor Worker` "
+        "WHERE site=%s AND status<>'GONE' AND last_heartbeat < %s",
+        (site, gone_cut),
+        as_dict=True,
+    )
+    just_gone_ids = [r["worker_id"] for r in just_gone_rows]
 
     # Order matters: mark GONE first, then STALE (which excludes already-GONE rows).
     frappe.db.sql(
@@ -166,6 +179,41 @@ def _reaper_loop_iter(site: str, frappe) -> None:
         "WHERE site=%s AND last_heartbeat < %s",
         (site, prune_cut),
     )
+    return just_gone_ids
+
+
+def _reaper_drift_correction_iter(
+    redis_client, site: str, just_gone_worker_ids: list[str],
+) -> None:
+    """For workers marked GONE in this reaper pass, count their currently-RUNNING
+    jobs (grouped by queue) and decrement the inflight counter accordingly.
+
+    Does NOT touch job rows — XAUTOCLAIM owns message-level recovery (spec §5.5):
+    a peer worker reclaims the message from the dead worker's PEL, runs the job,
+    and writes the row's terminal status. Pre-flipping status=FAILED here would
+    race with that flow."""
+    if not just_gone_worker_ids:
+        return
+    placeholders = ",".join(["%s"] * len(just_gone_worker_ids))
+    rows = frappe.db.sql(
+        f"""SELECT queue, COUNT(*) AS running_count
+            FROM `tabConductor Job`
+            WHERE worker_id IN ({placeholders}) AND status='RUNNING'
+            GROUP BY queue""",
+        tuple(just_gone_worker_ids),
+        as_dict=True,
+    )
+    for row in rows:
+        try:
+            correct_drift(
+                redis_client, site, row["queue"],
+                decrement_by=int(row["running_count"]),
+            )
+        except Exception as e:
+            log.warning(
+                "drift_correction_failed",
+                site=site, queue=row["queue"], error=str(e),
+            )
 
 
 def _reaper_loop(stop_event: threading.Event, lost_lock_event: threading.Event,
@@ -177,7 +225,12 @@ def _reaper_loop(stop_event: threading.Event, lost_lock_event: threading.Event,
             frappe.init(site=site, sites_path=sites_path)
             frappe.connect()
             try:
-                _reaper_loop_iter(site, frappe)
+                just_gone_ids = _reaper_loop_iter(site, frappe)
+                from conductor.client import get_redis
+                from conductor.config import load_config
+                cfg = load_config(frappe.local.conf)
+                r = get_redis(cfg.redis_url)
+                _reaper_drift_correction_iter(r, site, just_gone_ids or [])
                 frappe.db.commit()
             finally:
                 frappe.destroy()
