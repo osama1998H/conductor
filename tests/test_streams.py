@@ -57,8 +57,7 @@ def test_ensure_consumer_group_propagates_other_errors(monkeypatch, fake_redis):
         ensure_consumer_group(fake_redis, stream_key("test.local", "default"))
 
 
-"""Phase 6: stream-key → site routing for pool worker."""
-
+# Phase 6: stream-key → site routing for pool worker.
 from conductor.streams import parse_site_from_stream_key
 
 
