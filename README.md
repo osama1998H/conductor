@@ -72,9 +72,10 @@ with DB **2** forced.
 
 ## Status
 
-Phase 3 of 5 (Phase 4 was Observability — removed; v1 stays focused on the
-job platform). See `docs/superpowers/specs/2026-04-27-conductor-master-design.md`
-for the full roadmap.
+Phase 4 of 5 (Phase 4 was Observability — removed; Phase 5 (Workflows)
+shipped 2026-04-29). Phase 6 — Multi-tenant polish — remains. See
+`docs/superpowers/specs/2026-04-27-conductor-master-design.md` for the
+full roadmap.
 
 ## Operations (Phase 2+)
 
@@ -110,6 +111,48 @@ $ bench --site SITE conductor schedule run-now <name>
 Create / edit schedules in **Conductor Schedule** under the Conductor module. Required fields: `cron_expression`, `timezone` (defaults to UTC), `method` (dotted path), `queue`. Validation runs the cron expression through `croniter` on save; bad expressions are rejected with a Frappe validation error.
 
 Cron is at-least-once across scheduler crashes — if a scheduler dies between `conductor.enqueue(...)` and the `next_run_at` update, the next holder re-fires the schedule. Make your `method` idempotent if duplicate execution would corrupt state.
+
+## Workflows (Phase 5)
+
+Define DAG workflows as Python classes with declarative steps and optional compensations:
+
+```python
+import conductor
+from conductor.workflow import workflow, Step
+
+@workflow(name="OrderFulfillment", queue="default")
+class OrderFulfillment:
+    reserve_step = Step("reserve",  compensation="release")
+    charge_step  = Step("charge",   depends_on=("reserve",), compensation="refund")
+    notify_step  = Step("notify",   depends_on=("reserve",))
+    receipt_step = Step("receipt",  depends_on=("charge", "notify"))
+
+    def reserve(self, *, order_id): ...
+    def release(self, *, order_id): ...
+    def charge(self,  *, order_id): ...
+    def refund(self,  *, order_id): ...
+    def notify(self,  *, order_id): ...
+    def receipt(self, *, order_id): ...
+```
+
+Trigger:
+
+```python
+run_id = conductor.run_workflow("OrderFulfillment", order_id=42, idempotency_key="ord-42")
+```
+
+Each step runs as a normal Conductor Job, inheriting Phase-1 retry/timeout/idempotency/DLQ. On a step's terminal failure, completed steps are compensated in reverse-topological order; the run lands `FAILED`. If a compensation itself terminally fails, earlier completed steps are **not** rolled back — operator triages from the dashboard.
+
+CLI:
+
+```
+$ bench --site SITE conductor workflow list
+$ bench --site SITE conductor workflow run <name> [--kwargs '{"k":"v"}'] [--idempotency-key K]
+$ bench --site SITE conductor workflow status <run_id>
+$ bench --site SITE conductor workflow cancel <run_id>
+```
+
+Dashboard tab: `/conductor-dashboard#/workflows` — Mermaid DAG visualization with per-step status colors, run history, cancel-run action (operator-gated).
 
 ## Dashboard (Phase 3)
 
