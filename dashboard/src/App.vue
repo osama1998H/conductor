@@ -7,6 +7,7 @@
       <router-link to="/dlq">DLQ</router-link>
       <router-link to="/schedules">Schedules</router-link>
       <router-link to="/workers">Workers</router-link>
+      <router-link to="/workflows">Workflows</router-link>
     </nav>
     <main><router-view /></main>
     <ConfirmDialog />

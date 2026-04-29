@@ -68,3 +68,19 @@ export function getList(doctype, opts = {}) {
 export function userRoles() {
   return window.frappe?.boot?.user?.roles || [];
 }
+
+export async function listWorkflows() {
+  return await callMethod("conductor.api.workflows.list_workflows");
+}
+
+export async function listWorkflowRuns(opts = {}) {
+  return await callMethod("conductor.api.workflows.list_runs", opts);
+}
+
+export async function getWorkflowRun(run_id) {
+  return await callMethod("conductor.api.workflows.get_run", { run_id });
+}
+
+export async function cancelWorkflowRun(run_id) {
+  return await callMethod("conductor.api.workflows.cancel_run", { run_id }, "POST");
+}
