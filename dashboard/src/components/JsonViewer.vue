@@ -1,5 +1,5 @@
 <template>
-  <pre class="json">{{ formatted }}</pre>
+  <pre class="font-mono text-xs bg-slate-50 p-3 rounded max-h-96 overflow-auto whitespace-pre-wrap break-words">{{ formatted }}</pre>
 </template>
 
 <script setup>
@@ -12,17 +12,3 @@ const formatted = computed(() => {
   catch { return String(props.value); }
 });
 </script>
-
-<style scoped>
-.json {
-  font-family: ui-monospace, SFMono-Regular, monospace;
-  font-size: 12px;
-  background: #f8fafc;
-  padding: 12px;
-  border-radius: 4px;
-  max-height: 400px;
-  overflow: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-</style>

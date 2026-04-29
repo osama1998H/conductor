@@ -1,7 +1,12 @@
 <template>
-  <div class="card" @click="$emit('click')">
-    <div class="value">{{ value }}</div>
-    <div class="label">{{ label }}</div>
+  <div
+    class="bg-white border border-slate-200 rounded-md px-5 py-4 cursor-pointer
+           min-h-20 flex flex-col justify-between
+           transition-colors duration-150 hover:border-primary"
+    @click="$emit('click')"
+  >
+    <div class="text-3xl font-semibold text-slate-800">{{ value }}</div>
+    <div class="text-xs text-slate-500 uppercase tracking-wider">{{ label }}</div>
   </div>
 </template>
 
@@ -12,35 +17,3 @@ defineProps({
 });
 defineEmits(["click"]);
 </script>
-
-<style scoped>
-.card {
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  padding: 16px 20px;
-  cursor: pointer;
-  transition: border-color 0.15s;
-  min-height: 80px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-}
-
-.card:hover {
-  border-color: #2563eb;
-}
-
-.value {
-  font-size: 28px;
-  font-weight: 600;
-  color: #1e293b;
-}
-
-.label {
-  font-size: 12px;
-  color: #64748b;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-</style>
