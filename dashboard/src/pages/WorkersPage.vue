@@ -1,92 +1,106 @@
 <template>
-  <div class="workers-page">
-    <div class="master">
-      <div class="filters">
-        <button @click="reload">Refresh</button>
+  <div class="flex gap-4 h-[calc(100vh-100px)]">
+    <div class="flex-1 min-w-0 flex flex-col">
+      <div class="mb-3">
+        <button
+          @click="reload"
+          class="px-3 py-1 text-sm bg-white text-slate-800 border border-slate-300 rounded
+                 hover:border-primary hover:bg-slate-50 active:bg-blue-50
+                 disabled:opacity-50 disabled:cursor-not-allowed
+                 transition-colors duration-150 cursor-pointer"
+        >Refresh</button>
       </div>
-      <table class="worker-list">
+      <table class="w-full border-collapse text-xs">
         <thead>
           <tr>
-            <th>Status</th>
-            <th>Worker</th>
-            <th>Host</th>
-            <th>PID</th>
-            <th>Queues</th>
-            <th>HB age</th>
+            <th class="text-left px-2 py-1.5 border-b border-slate-200">Status</th>
+            <th class="text-left px-2 py-1.5 border-b border-slate-200">Worker</th>
+            <th class="text-left px-2 py-1.5 border-b border-slate-200">Host</th>
+            <th class="text-left px-2 py-1.5 border-b border-slate-200">PID</th>
+            <th class="text-left px-2 py-1.5 border-b border-slate-200">Queues</th>
+            <th class="text-left px-2 py-1.5 border-b border-slate-200">HB age</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="row in sortedRows" :key="row.name" :class="{ active: row.name === worker_id }"
-            @click="open(row.name)">
-            <td>
+          <tr
+            v-for="row in sortedRows"
+            :key="row.name"
+            :class="[
+              'cursor-pointer',
+              row.name === worker_id ? 'bg-indigo-100' : 'hover:bg-slate-50',
+            ]"
+            @click="open(row.name)"
+          >
+            <td class="px-2 py-1.5 border-b border-slate-200">
               <StatusBadge :status="row.status" />
             </td>
-            <td class="mono">{{ row.name }}</td>
-            <td>{{ row.host }}</td>
-            <td>{{ row.pid }}</td>
-            <td>{{ parseQueues(row.queues) }}</td>
-            <td class="ts">{{ heartbeatAge(row.last_heartbeat) }}</td>
+            <td class="px-2 py-1.5 border-b border-slate-200 font-mono">{{ row.name }}</td>
+            <td class="px-2 py-1.5 border-b border-slate-200">{{ row.host }}</td>
+            <td class="px-2 py-1.5 border-b border-slate-200">{{ row.pid }}</td>
+            <td class="px-2 py-1.5 border-b border-slate-200">{{ parseQueues(row.queues) }}</td>
+            <td class="px-2 py-1.5 border-b border-slate-200 text-2xs text-slate-500">{{ heartbeatAge(row.last_heartbeat) }}</td>
           </tr>
         </tbody>
       </table>
-      <div v-if="!rows.length" class="empty">No workers registered.</div>
+      <div v-if="!rows.length" class="text-slate-400 p-3 text-center">No workers registered.</div>
     </div>
 
-    <div class="detail" v-if="worker_id">
-      <div v-if="!detail" class="empty">Loading…</div>
+    <div class="flex-1 min-w-0 border-l border-slate-300 pl-4 overflow-auto" v-if="worker_id">
+      <div v-if="!detail" class="text-slate-400 p-3 text-center">Loading…</div>
       <div v-else>
-        <header>
+        <header class="flex gap-2 items-center mb-4 flex-wrap">
           <StatusBadge :status="detail.status" />
-          <code>{{ detail.name }}</code>
+          <code class="font-mono">{{ detail.name }}</code>
           <span>· {{ detail.host }}:{{ detail.pid }}</span>
           <span v-if="detail.conductor_version">· v{{ detail.conductor_version }}</span>
         </header>
 
-        <section>
-          <h4>Queues</h4>
-          <p class="mono">{{ parseQueues(detail.queues) }}</p>
+        <section class="mt-4">
+          <h4 class="mb-2">Queues</h4>
+          <p class="font-mono">{{ parseQueues(detail.queues) }}</p>
         </section>
 
-        <section>
-          <h4>Heartbeat</h4>
-          <p>Last beat at <span class="ts">{{ detail.last_heartbeat }}</span> ({{ detail.heartbeat_age_seconds }}s ago)
-          </p>
-          <p>Started at <span class="ts">{{ detail.started_at }}</span></p>
+        <section class="mt-4">
+          <h4 class="mb-2">Heartbeat</h4>
+          <p>Last beat at <span class="text-2xs text-slate-500">{{ detail.last_heartbeat }}</span> ({{ detail.heartbeat_age_seconds }}s ago)</p>
+          <p>Started at <span class="text-2xs text-slate-500">{{ detail.started_at }}</span></p>
         </section>
 
-        <section v-if="detail.current_job">
-          <h4>Currently executing</h4>
-          <router-link :to="`/jobs/${detail.current_job}`" class="mono">{{ detail.current_job }}</router-link>
+        <section v-if="detail.current_job" class="mt-4">
+          <h4 class="mb-2">Currently executing</h4>
+          <router-link :to="`/jobs/${detail.current_job}`" class="font-mono">{{ detail.current_job }}</router-link>
           <span v-if="currentJobStatus"> ·
             <StatusBadge :status="currentJobStatus" />
           </span>
         </section>
 
-        <section>
-          <h4>Recent jobs handled</h4>
-          <table v-if="detail.recent_jobs?.length" class="runs">
+        <section class="mt-4">
+          <h4 class="mb-2">Recent jobs handled</h4>
+          <table v-if="detail.recent_jobs?.length" class="w-full border-collapse text-xs">
             <thead>
               <tr>
-                <th>Job ID</th>
-                <th>Method</th>
-                <th>Queue</th>
-                <th>Status</th>
-                <th>Finished</th>
+                <th class="text-left px-2 py-1 border-b border-slate-200">Job ID</th>
+                <th class="text-left px-2 py-1 border-b border-slate-200">Method</th>
+                <th class="text-left px-2 py-1 border-b border-slate-200">Queue</th>
+                <th class="text-left px-2 py-1 border-b border-slate-200">Status</th>
+                <th class="text-left px-2 py-1 border-b border-slate-200">Finished</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="r in detail.recent_jobs" :key="r.job_id">
-                <td><router-link :to="`/jobs/${r.job_id}`" class="mono">{{ r.job_id.slice(0, 8) }}…</router-link></td>
-                <td class="mono">{{ r.method }}</td>
-                <td>{{ r.queue }}</td>
-                <td>
+                <td class="px-2 py-1 border-b border-slate-200">
+                  <router-link :to="`/jobs/${r.job_id}`" class="font-mono">{{ r.job_id.slice(0, 8) }}…</router-link>
+                </td>
+                <td class="px-2 py-1 border-b border-slate-200 font-mono">{{ r.method }}</td>
+                <td class="px-2 py-1 border-b border-slate-200">{{ r.queue }}</td>
+                <td class="px-2 py-1 border-b border-slate-200">
                   <StatusBadge :status="r.status" />
                 </td>
-                <td class="ts">{{ r.finished_at }}</td>
+                <td class="px-2 py-1 border-b border-slate-200 text-2xs text-slate-500">{{ r.finished_at }}</td>
               </tr>
             </tbody>
           </table>
-          <div v-else class="empty">No recent jobs.</div>
+          <div v-else class="text-slate-400 p-3 text-center">No recent jobs.</div>
         </section>
       </div>
     </div>
@@ -169,100 +183,3 @@ async function loadDetail(id) {
 
 watch(worker_id, loadDetail, { immediate: true });
 </script>
-
-<style scoped>
-.workers-page {
-  display: flex;
-  gap: 16px;
-  height: calc(100vh - 100px);
-}
-
-.master {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.detail {
-  flex: 1;
-  min-width: 0;
-  border-left: 1px solid #ddd;
-  padding-left: 16px;
-  overflow: auto;
-}
-
-.filters {
-  margin-bottom: 12px;
-}
-
-.worker-list {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 12px;
-}
-
-.worker-list th,
-.worker-list td {
-  text-align: left;
-  padding: 6px 8px;
-  border-bottom: 1px solid #eee;
-}
-
-.worker-list tbody tr {
-  cursor: pointer;
-}
-
-.worker-list tbody tr:hover {
-  background: #f8fafc;
-}
-
-.worker-list tbody tr.active {
-  background: #e0e7ff;
-}
-
-.mono,
-code {
-  font-family: ui-monospace, SFMono-Regular, monospace;
-}
-
-.ts {
-  font-size: 11px;
-  color: #64748b;
-}
-
-.empty {
-  color: #94a3b8;
-  padding: 12px;
-  text-align: center;
-}
-
-header {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
-}
-
-section {
-  margin-top: 16px;
-}
-
-section h4 {
-  margin-bottom: 8px;
-}
-
-.runs {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 12px;
-}
-
-.runs th,
-.runs td {
-  text-align: left;
-  padding: 4px 8px;
-  border-bottom: 1px solid #eee;
-}
-</style>
