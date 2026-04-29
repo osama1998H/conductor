@@ -8,7 +8,6 @@ internally — there is no daemon and no re-scan.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from conductor.logging import get_logger
@@ -49,11 +48,10 @@ def _installed_apps_for_site(site: str, sites_path: str) -> list[str]:
     frappe.init(site=site, sites_path=sites_path)
     try:
         frappe.connect()
-        try:
-            return list(frappe.get_installed_apps())
-        finally:
-            frappe.db.close() if frappe.db else None
+        return list(frappe.get_installed_apps())
     finally:
+        if frappe.db:
+            frappe.db.close()
         frappe.destroy()
 
 
