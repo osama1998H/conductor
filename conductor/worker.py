@@ -267,6 +267,18 @@ def _xautoclaim_pending(redis_client, stream: str, worker_id: str) -> list[tuple
     return []
 
 
+def _build_streams_dict(redis_client, sites: list[str], queues: list[str]) -> dict[str, str]:
+    """For each (site, queue) pair, ensure the consumer group exists and
+    return a streams dict suitable for XREADGROUP."""
+    streams: dict[str, str] = {}
+    for site in sites:
+        for queue in queues:
+            skey = stream_key(site, queue)
+            ensure_consumer_group(redis_client, skey)
+            streams[skey] = ">"
+    return streams
+
+
 class CancelPoller:
     """Polls Conductor Job for status=CANCELLED rows belonging to this worker
     and flips matching cancel_event entries in the shared map (§12.4)."""
@@ -561,26 +573,46 @@ def _install_signal_handlers():
             pass
 
 
-def run_worker(*, queues: list[str], concurrency: int, site: str, grace_seconds: int = 30) -> None:
-    setup_logging(site=site)
+def run_worker_pool(
+    *,
+    sites: list[str],
+    queues: list[str],
+    concurrency: int,
+    grace_seconds: int = 30,
+) -> None:
+    """Run a Conductor pool worker against N sites x M queues.
+
+    The single-site `run_worker` is now a thin wrapper that calls this
+    with sites=[site]. Subsequent Phase 6 tasks add multi-site heartbeat
+    (Task 7), throttle gate (Task 8), per-site CancelPoller (Task 9).
+    """
+    if not sites:
+        raise ValueError("run_worker_pool: sites must be non-empty")
+
+    primary_site = sites[0]
+    setup_logging(site=primary_site)
+
+    # Cfg/Redis are bench-wide -- read from the already-inited frappe.local
+    # (the CLI command sets up frappe.init/connect before calling us).
     cfg = load_config(frappe.local.conf)
-    r = get_redis(cfg.redis_url)
-    worker_id = _make_worker_id()
     sites_path = frappe.local.sites_path
-    _register_worker(worker_id, queues, site)
+    r = get_redis(cfg.redis_url)
+
+    worker_id = _make_worker_id()
+    # Task 7 will replace this with multi-site registration.
+    _register_worker(worker_id, queues, primary_site)
     _install_signal_handlers()
 
-    log_ctx = log.bind(worker_id=worker_id, site=site)
-    log_ctx.info("worker_started", queues=queues, concurrency=concurrency)
+    log_ctx = log.bind(worker_id=worker_id, sites=sites)
+    log_ctx.info("worker_pool_started", queues=queues, concurrency=concurrency)
 
-    streams = {}
-    for q in queues:
-        skey = stream_key(site, q)
-        ensure_consumer_group(r, skey)
-        streams[skey] = ">"
+    streams = _build_streams_dict(r, sites, queues)
 
     pool = ThreadPoolExecutor(max_workers=concurrency, thread_name_prefix="conductor-")
-    cancel_poller = CancelPoller(worker_id, site, sites_path, _cancel_events, _cancel_events_lock)
+    # Task 9 will replace this with per-site CancelPollers.
+    cancel_poller = CancelPoller(
+        worker_id, primary_site, sites_path, _cancel_events, _cancel_events_lock,
+    )
     cancel_poller.start()
 
     last_beat = 0.0
@@ -592,8 +624,8 @@ def run_worker(*, queues: list[str], concurrency: int, site: str, grace_seconds:
                 last_beat = now
 
             try:
-                _reclaim_into_pool(r, streams, worker_id, pool, site, sites_path, wait=False)
-                _read_and_dispatch(r, streams, concurrency, 5000, worker_id, pool, site, sites_path, wait=False)
+                _reclaim_into_pool(r, streams, worker_id, pool, primary_site, sites_path, wait=False)
+                _read_and_dispatch(r, streams, concurrency, 5000, worker_id, pool, primary_site, sites_path, wait=False)
             except redis_mod.exceptions.ConnectionError as e:
                 log_ctx.warning("redis_connection_error", error=str(e))
                 time.sleep(2)
@@ -606,3 +638,10 @@ def run_worker(*, queues: list[str], concurrency: int, site: str, grace_seconds:
         pool.shutdown(wait=True)
         _mark_worker_gone(worker_id)
         log_ctx.info("worker_stopped")
+
+
+def run_worker(*, queues: list[str], concurrency: int, site: str, grace_seconds: int = 30) -> None:
+    """Single-site worker -- implemented as the N=1 case of pool mode."""
+    return run_worker_pool(
+        sites=[site], queues=queues, concurrency=concurrency, grace_seconds=grace_seconds,
+    )
