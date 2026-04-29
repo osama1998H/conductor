@@ -1,5 +1,5 @@
 <template>
-  <span :class="['badge', `badge-${tone}`]">{{ status }}</span>
+  <span :class="['text-2xs px-2 py-0.5 rounded-full font-medium', toneClasses]">{{ status }}</span>
 </template>
 
 <script setup>
@@ -24,38 +24,15 @@ const tone = computed(() => {
     default: return "grey";
   }
 });
+
+const toneClasses = computed(() => {
+  switch (tone.value) {
+    case "green":  return "bg-green-100 text-green-800";
+    case "blue":   return "bg-blue-100 text-blue-900";
+    case "yellow": return "bg-amber-100 text-amber-800";
+    case "red":    return "bg-red-100 text-red-800";
+    case "grey":
+    default:       return "bg-slate-100 text-slate-600";
+  }
+});
 </script>
-
-<style scoped>
-.badge {
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-weight: 500;
-}
-
-.badge-green {
-  background: #dcfce7;
-  color: #166534;
-}
-
-.badge-blue {
-  background: #dbeafe;
-  color: #1e40af;
-}
-
-.badge-yellow {
-  background: #fef3c7;
-  color: #854d0e;
-}
-
-.badge-red {
-  background: #fee2e2;
-  color: #991b1b;
-}
-
-.badge-grey {
-  background: #f1f5f9;
-  color: #475569;
-}
-</style>
