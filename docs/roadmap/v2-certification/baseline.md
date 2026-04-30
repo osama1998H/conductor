@@ -69,3 +69,41 @@ This is the campaign target — M2 will force-trigger every one of these.
 
 This baseline precedes the M1 changes (Task 7 below). After Task 7, RQ worker
 is stopped and conductor processes take over.
+
+## M1 operational changes (Task 7) — applied 2026-04-30 19:39
+
+- Set `conductor_intercept_frappe_enqueue: true` in `common_site_config.json`.
+- Commented out the `worker:` entry in bench `Procfile`; added
+  `conductor_worker:` and `conductor_scheduler:` lines.
+- Backups: `Procfile.pre-v2`, `sites/common_site_config.json.pre-v2`.
+- Restoration: `cp Procfile.pre-v2 Procfile && cp sites/common_site_config.json.pre-v2 sites/common_site_config.json`.
+
+## M1 finding (real bug, fixed in commit `97dccae`)
+
+The first restart after Task 7 had `flag in conf: True` but
+`patch installed: False`. Root cause: the original bootstrap read the flag
+at install time, but conductor is imported during Frappe's app discovery —
+**before** `frappe.init()` populates `frappe.conf`. The bootstrap saw an
+empty conf, silently no-op'd, and never re-fired.
+
+Fix: bootstrap installs the patch unconditionally on conductor import; the
+flag check moves into the patched function (call-time read from
+`frappe.conf`). When the flag is unset, calls transparently fall through
+to the original `frappe.enqueue` — zero behavior change for users who
+haven't opted in.
+
+After the fix and a fresh `bench start`:
+
+```
+flag in conf: True
+patch installed: True
+intercept enabled: True
+site has conductor: True
+```
+
+## Bench process state after M1
+
+- `honcho start`, PID 53868
+- `bench --site frappe.localhost conductor worker --queue default --concurrency 4`, PID 53889
+- `bench --site frappe.localhost conductor scheduler`, PID 53890
+- No RQ `bench worker` process
