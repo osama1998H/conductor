@@ -29,7 +29,7 @@ from tests_chaos.conftest import wait_for_status
 def test_kill_during_run_reclaims_and_completes(spawn_worker):
     """Worker A spawns alone, claims the slow job, dies. Worker B then comes up
     and must XAUTOCLAIM the orphaned message and complete it."""
-    # Phase 1: worker A alone. It will claim the job because it's the only
+    # Worker A alone. It will claim the job because it's the only
     # consumer in the group with `>` outstanding.
     with spawn_worker() as worker_a:
         job_id = conductor.enqueue("conductor.demo.slow_chaos", queue="default", timeout=20)
@@ -42,7 +42,7 @@ def test_kill_during_run_reclaims_and_completes(spawn_worker):
         except (ProcessLookupError, PermissionError):
             pass
 
-    # Phase 2: worker B comes up and must reclaim A's orphaned pending entry.
+    # Worker B comes up and must reclaim A's orphaned pending entry.
     # Lock TTL = 5s (already expired since kill happened ≥3s ago + B startup);
     # autoclaim idle = 8s, so B's first iteration after spawn-warmup may
     # need to wait until t ~= 8s after A claimed. We give 90s total to be safe.

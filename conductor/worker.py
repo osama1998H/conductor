@@ -1,14 +1,14 @@
 """Conductor worker loop: XREADGROUP → execute → status update → XACK.
 
-Phase 1 additions:
-- Acquire/release execution lock around job execution.
+Per attempt the worker:
+- Acquires/releases the execution lock around job execution.
 - On retryable failure: ZADD to scheduled set, status=SCHEDULED_RETRY.
 - On exhausted retries: XADD to DLQ stream + Conductor DLQ Entry row, status=DLQ.
-- Per-attempt Conductor Job Run row at terminal of each attempt.
-- XAUTOCLAIM stalled-message reclamation per iteration (idle ≥ 60s).
+- Writes a Conductor Job Run row at terminal of each attempt.
+- Reclaims stalled messages via XAUTOCLAIM (idle ≥ 60s) once per iteration.
 
-Phase 2: DelayDrainer and OrphanSweeper are now owned by the scheduler process.
-The worker owns only CancelPoller + the XAUTOCLAIM loop + heartbeat.
+The scheduler process owns the DelayDrainer and OrphanSweeper loops; the worker
+only runs the CancelPoller + XAUTOCLAIM loop + heartbeat.
 """
 
 from __future__ import annotations
@@ -570,7 +570,7 @@ def _handle_one(
             redis_client.xack(stream_name, CONSUMER_GROUP, msg_id)
             return
 
-        # Phase 6 throttle gate: rate limit + concurrency cap.
+        # Throttle gate: rate limit + concurrency cap.
         # Resolved once per job so the success path can reference `conc`.
         rps, conc = _resolve_queue_limits(msg.queue)
         if rps > 0 or conc > 0:
@@ -595,7 +595,6 @@ def _handle_one(
                 with set_context(job_id=msg.job_id, attempt=msg.attempt, deadline=msg.deadline, cancel_event=cancel_event):
                     _set_job_running(msg.job_id, worker_id)
 
-                    # Phase 5 hook — mark workflow step RUNNING if applicable.
                     if msg.workflow_run_id and msg.step_id:
                         from conductor.workflow.worker_hooks import mark_step_running
                         is_comp = bool(msg.kwargs.get("__is_compensation"))
@@ -605,7 +604,7 @@ def _handle_one(
                             is_compensation=is_comp,
                         )
 
-                    # Phase 5: For workflow steps, instantiate the class and call the method as an instance method.
+                    # For workflow steps, instantiate the class and call the method as an instance method.
                     if msg.workflow_run_id and msg.step_id:
                         # msg.method is "package.module.ClassName.method_name"
                         # Split off the last two parts (ClassName.method_name)
@@ -800,9 +799,8 @@ def run_worker_pool(
 ) -> None:
     """Run a Conductor pool worker against N sites x M queues.
 
-    The single-site `run_worker` is now a thin wrapper that calls this
-    with sites=[site]. Subsequent Phase 6 tasks add multi-site heartbeat
-    (Task 7), throttle gate (Task 8), per-site CancelPoller (Task 9).
+    The single-site `run_worker` is a thin wrapper that calls this with
+    sites=[site].
     """
     if not sites:
         raise ValueError("run_worker_pool: sites must be non-empty")

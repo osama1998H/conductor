@@ -43,7 +43,7 @@ For each KPI, the harness:
 
 KPI 5's throughput numbers come from a single-worker run on a macOS dev bench; the per-job sleep budget approximates real workloads at three sizes.
 
-The full threat model, harness design, and per-KPI invariants live in [`docs/superpowers/specs/2026-04-30-conductor-vs-rq-kpi-plan.md`](superpowers/specs/2026-04-30-conductor-vs-rq-kpi-plan.md).
+The harness lives in `tests/comparative/`; each KPI is a runnable script that emits a single number per engine.
 
 ---
 

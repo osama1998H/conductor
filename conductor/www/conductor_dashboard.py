@@ -2,12 +2,8 @@
 
 Frappe runs `get_context()` for every request to a www/ page. We redirect
 Guest users to the login page (with a redirect-back to the dashboard so
-they land here after login). Authenticated users see the SPA shell.
-
-Phase 3 spec §6 documented this as the page-level perm: "served to any
-authenticated user; the SPA's first call is get_state and a 403 there
-shows a 'no access' page". Adding this gate so we never even render the
-shell for unauthenticated visitors.
+they land here after login). Authenticated users see the SPA shell; the
+SPA's own API calls enforce per-action permissions.
 """
 
 import frappe

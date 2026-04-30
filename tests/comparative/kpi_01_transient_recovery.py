@@ -52,10 +52,9 @@ def run(engine: Engine) -> KPI1Result:
     print(f"\n=== KPI 1 (transient-recovery) — engine={engine.name} ===")
     engine.setup()
 
-    # Conductor's Phase 2+ retry path requires the scheduler process —
-    # it owns the delay-drain loop that pulls SCHEDULED_RETRY jobs back
-    # to the queue. RQ's retry (when configured) is in-worker and needs
-    # no separate process.
+    # Conductor's retry path requires the scheduler process — it owns the
+    # delay-drain loop that pulls SCHEDULED_RETRY jobs back to the queue.
+    # RQ's retry (when configured) is in-worker and needs no separate process.
     if hasattr(engine, "spawn_scheduler"):
         engine.spawn_scheduler()
     engine.spawn_worker()

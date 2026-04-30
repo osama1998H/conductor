@@ -1,4 +1,4 @@
-"""Phase 6 exit criterion #2: per-(site, queue) rate limit caps throughput.
+"""Rate-limit chaos: per-(site, queue) rate limit caps throughput.
 
 Configures Conductor Queue 'default' with max_rps=10. Dispatches 50 jobs that
 sleep 100 ms each (via conductor.demo.sleep — `time.sleep` cannot be used

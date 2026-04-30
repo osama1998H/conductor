@@ -1,7 +1,7 @@
-"""Redis key namespacing for Phase 5 workflow state.
+"""Redis key namespacing for workflow state.
 
-All keys follow master §8 / spec §9: conductor:{site}:<purpose>:<scope>.
-Lua scripts touch the wfdeps key only — single-key per master §3 #15.
+All keys follow `conductor:{site}:<purpose>:<scope>`. Lua scripts touch the
+wfdeps key only — single-key access keeps cluster compatibility open.
 """
 
 from __future__ import annotations

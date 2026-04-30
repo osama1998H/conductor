@@ -1,4 +1,4 @@
-"""Phase 6 benchmark — non-gating measurement of per-job site-context overhead.
+"""Pool-mode benchmark — non-gating measurement of per-job site-context overhead.
 
 Spins up to 10 fixture sites (or whatever the bench permits — gracefully
 degrades to fewer), dispatches 100 instant jobs per site, runs a single
@@ -8,10 +8,10 @@ pool worker `--concurrency=8`, and prints:
     - per-job overhead as % of trivial-job duration
 
 If the overhead exceeds 30% of trivial-job wall time, this test prints a
-recommendation to file a follow-up for the connection cache (master §10
-risk #2). It does NOT fail the build.
+recommendation to file a follow-up for a per-site connection cache. It
+does NOT fail the build.
 
-Run with: `pytest tests/benchmarks/test_phase6_pool_throughput.py -v -s --no-header`
+Run with: `pytest tests/benchmarks/test_pool_throughput_benchmark.py -v -s --no-header`
 """
 
 from __future__ import annotations
@@ -51,7 +51,7 @@ def _percentile(samples: list[float], p: float) -> float:
 )
 def test_pool_throughput_benchmark():
     sites = _existing_conductor_sites()[:TARGET_SITE_COUNT]
-    print(f"\n=== Phase 6 pool benchmark — {len(sites)} sites x {JOBS_PER_SITE} jobs ===")
+    print(f"\n=== Pool-mode benchmark — {len(sites)} sites x {JOBS_PER_SITE} jobs ===")
 
     # 1. Enqueue
     enq_start = time.time()
@@ -135,8 +135,8 @@ def test_pool_throughput_benchmark():
         if p50 > 10:
             print(
                 f"\n!! RECOMMENDATION: p50 = {p50:.0f}ms suggests significant "
-                f"per-job init/destroy overhead. File follow-up for connection cache "
-                f"per master section 10 risk #2."
+                f"per-job init/destroy overhead. Consider opening a follow-up "
+                f"for a per-site connection cache."
             )
     else:
         print("!! no Job Run rows found — benchmark inconclusive")

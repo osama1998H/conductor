@@ -1,8 +1,8 @@
 """Unit tests for the reaper loop — STALE/GONE transitions + 7d prune.
 
-After Phase 6, `_reaper_loop_iter` first SELECTs the workers about to flip GONE
-(so the caller can drift-correct inflight counters), then runs the same three
-mutations (GONE update, STALE update, 7d prune)."""
+`_reaper_loop_iter` first SELECTs the workers about to flip GONE (so the caller
+can drift-correct inflight counters), then runs the three mutations: GONE update,
+STALE update, 7-day prune."""
 
 from datetime import datetime
 from unittest.mock import MagicMock

@@ -1,4 +1,4 @@
-"""Phase 6 exit criterion #3: per-(site, queue) concurrency cap holds — no
+"""Concurrency-cap chaos: per-(site, queue) concurrency cap holds — no
 sample shows more than `max_concurrent` jobs simultaneously RUNNING.
 
 Configures Conductor Queue 'default' with max_concurrent=2. Dispatches 10

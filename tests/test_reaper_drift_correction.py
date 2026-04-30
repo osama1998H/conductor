@@ -1,4 +1,4 @@
-"""Unit test for the reaper's Phase 6 drift-correction pass."""
+"""Unit test for the reaper's drift-correction pass on rate-limit and concurrency counters."""
 
 from unittest.mock import MagicMock, patch
 

@@ -1,8 +1,6 @@
-"""Dashboard whitelisted API surface — Phase 3.
+"""Dashboard whitelisted API surface.
 
-Reference: docs/superpowers/specs/2026-04-28-conductor-phase3-dashboard-design.md §7.
-
-Permission model (spec §6):
+Permission model:
   - System Manager: full access.
   - Conductor Operator: read everything + safe-mutating actions
     (retry / cancel / schedule run-now).

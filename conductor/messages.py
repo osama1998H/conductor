@@ -3,9 +3,9 @@
 A stream message is a flat str→str dict (Redis Streams field values are
 ASCII-safe strings). args/kwargs are msgpack-then-base64 encoded.
 
-Phase 1 adds optional retry-policy + idempotency fields. Decoder treats
-missing fields as empty/zero defaults — backward-compatible with Phase 0
-messages still in queues during a rolling deploy. No schema_version bump.
+Retry-policy and idempotency fields are optional. The decoder treats missing
+fields as empty/zero defaults so older in-flight messages stay readable
+across rolling deploys without a schema_version bump.
 """
 
 from __future__ import annotations
@@ -54,7 +54,7 @@ def emit_job_event(job_id: str, status: str, **fields) -> None:
     )
 
 
-# Required only for the original Phase 0 set; Phase 1 fields are optional.
+# Required core fields; the retry-policy fields below are optional.
 _REQUIRED_FIELDS = {
     "job_id",
     "site",
@@ -86,7 +86,7 @@ class JobMessage:
     idempotency_key: str = ""
     workflow_run_id: str = ""
     step_id: str = ""
-    # Phase 1 retry-policy fields (all optional).
+    # Retry-policy fields (all optional).
     backoff: str = ""
     base_delay_seconds: int = 0
     max_delay_seconds: int = 0

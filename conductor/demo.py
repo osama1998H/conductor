@@ -17,9 +17,9 @@ def boom(**kwargs: Any) -> None:
 
 
 def sleep(seconds: float = 0.1, **kwargs: Any) -> None:
-    """Sleep for `seconds`, then return. Used by the Phase 6 rate-limit chaos
-    test: `time.sleep` cannot be invoked directly because `frappe.get_attr`
-    treats the first dotted segment as an app name."""
+    """Sleep for `seconds`, then return. Used by the rate-limit chaos test:
+    `time.sleep` cannot be invoked directly because `frappe.get_attr` treats
+    the first dotted segment as an app name."""
     import time
     time.sleep(seconds)
 
@@ -38,7 +38,7 @@ def slow_chaos(**kwargs: Any) -> dict:
     return {"completed": True}
 
 
-# Phase 5 chaos demo workflow — must live here so worker subprocesses can
+# Workflow demos for chaos tests — must live here so worker subprocesses can
 # import the class via frappe.get_attr (the test process cannot give the
 # worker a class defined inside a test function).
 from conductor.workflow import Step, workflow
@@ -46,7 +46,7 @@ from conductor.workflow import Step, workflow
 
 @workflow(name="DemoDiamond", queue="default")
 class DemoDiamond:
-    """Diamond DAG: a → {b, c} → d. Used by Phase 5 chaos tests."""
+    """Diamond DAG: a → {b, c} → d. Used by workflow chaos tests."""
 
     _a = Step("a")
     _b = Step("b", depends_on=("a",))
@@ -69,7 +69,7 @@ class DemoDiamond:
 @workflow(name="DemoCompensatingDiamond", queue="default")
 class DemoCompensatingDiamond:
     """Diamond DAG with compensations on a and b. Step c fails terminally
-    after retries. Used by the Phase 5 exit-criterion chaos test (master §4)."""
+    after retries. Used by the workflow compensation chaos test."""
 
     _a = Step("a", compensation="undo_a")
     _b = Step("b", depends_on=("a",), compensation="undo_b")
@@ -81,17 +81,17 @@ class DemoCompensatingDiamond:
 
     def undo_a(self, **kwargs: Any) -> None:
         import frappe
-        frappe.cache().set_value("phase5:undo_a:ran", "1")
+        frappe.cache().set_value("conductor:demo:undo_a:ran", "1")
 
     def b(self, **kwargs: Any) -> None:
         pass
 
     def undo_b(self, **kwargs: Any) -> None:
         import frappe
-        frappe.cache().set_value("phase5:undo_b:ran", "1")
+        frappe.cache().set_value("conductor:demo:undo_b:ran", "1")
 
     def c(self, **kwargs: Any) -> None:
-        raise RuntimeError("forced terminal failure for Phase 5 exit criterion")
+        raise RuntimeError("forced terminal failure for compensation chaos test")
 
     def d(self, **kwargs: Any) -> None:
         pass

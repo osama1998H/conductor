@@ -1,4 +1,4 @@
-"""Backfill of the four Phase 0 §11 integration tests not implemented in Phase 0."""
+"""Worker-level integration tests: timeout audit, doctor exit codes, and frappe.enqueue compat."""
 
 import subprocess
 import time

@@ -27,7 +27,7 @@ class TestConductorQueue(FrappeTestCase):
             ).insert()
 
 
-class TestConductorQueuePhase6Fields(FrappeTestCase):
+class TestConductorQueueRateLimitFields(FrappeTestCase):
     def test_default_queue_has_max_rps_field_default_zero(self):
         q = frappe.get_doc("Conductor Queue", "default")
         assert hasattr(q, "max_rps"), "max_rps field missing on Conductor Queue"

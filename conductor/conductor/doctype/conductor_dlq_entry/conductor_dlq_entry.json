@@ -26,7 +26,7 @@
   {"fieldname": "section_payload", "fieldtype": "Section Break", "label": "Payload"},
   {"fieldname": "payload", "fieldtype": "Long Text", "label": "Payload (JSON)"},
 
-  {"fieldname": "section_review", "fieldtype": "Section Break", "label": "Review (Phase 3)"},
+  {"fieldname": "section_review", "fieldtype": "Section Break", "label": "Review"},
   {"fieldname": "reviewed_by", "fieldtype": "Link", "options": "User", "label": "Reviewed By"},
   {"fieldname": "reviewed_at", "fieldtype": "Datetime", "label": "Reviewed At"},
   {"fieldname": "review_notes", "fieldtype": "Small Text", "label": "Review Notes"}

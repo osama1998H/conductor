@@ -1,8 +1,9 @@
 """Job dispatcher: write Conductor Job row, XADD to Redis Stream, publish realtime.
 
-Phase 1 additions: idempotency check, decorator-driven policy resolution
-(per-call > decorator > queue defaults), single-transaction DISPATCH_FAILED
-branch (M-2 fix).
+Resolves the retry policy in priority order: per-call kwargs > decorator > queue
+defaults. Idempotency is enforced via a Redis NX lock. The "DB row succeeded but
+XADD failed" case is handled by flipping the row to DISPATCH_FAILED in a single
+transaction.
 """
 
 from __future__ import annotations
@@ -137,7 +138,6 @@ def enqueue(
         log.info("dispatch_idempotency_hit", method=method, idem_key=idem_key, existing_job_id=existing)
         return existing
 
-    # Phase 5: Extract workflow metadata from kwargs if present
     workflow_run_id = kwargs.pop("__workflow_run_id", "")
     step_id = kwargs.pop("__step_id", "")
 

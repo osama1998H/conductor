@@ -161,3 +161,130 @@ Before merging, verify:
 - The code avoids unnecessary duplication.
 - The design is easy to extend without large rewrites.
 - The final result is simpler than the version that came before it.
+
+## Project structure
+
+`conductor/` is a Frappe app shipping a reliability-first background job
+platform. It coexists with `frappe.enqueue` / RQ on the same Redis instance.
+
+```
+conductor/                                          repo root
+├── conductor/                                      Python package (the Frappe app)
+│   ├── __init__.py                                 public API: enqueue, job, RetryPolicy, run_workflow, cancel
+│   ├── api/                                        whitelisted Frappe endpoints
+│   │   ├── dashboard.py                            REST surface consumed by the SPA
+│   │   ├── workflows.py                            workflow-specific endpoints
+│   │   └── json_safety.py                          JSON serialization helpers
+│   ├── commands/                                   `bench conductor <subcommand>` entrypoints
+│   │   ├── worker.py                               long-lived worker (single-site or pool mode)
+│   │   ├── scheduler.py                            singleton scheduler (delay / cron / reaper / drift)
+│   │   ├── doctor.py                               health-check + optional --demo round-trip
+│   │   ├── schedule.py                             list / enable / disable / run-now schedules
+│   │   ├── dlq.py                                  inspect + bulk-retry the DLQ
+│   │   ├── depth.py                                queue-depth dump
+│   │   ├── cancel.py                               cancel a running job
+│   │   ├── workflow.py                             workflow-run inspection + cancel
+│   │   └── migrate_rq.py                           one-shot RQ → Conductor importer
+│   ├── conductor/doctype/                          DocType definitions (JSON + controllers)
+│   │   ├── conductor_queue/                        queue config + per-tenant limits
+│   │   ├── conductor_job/                          one row per dispatch (audit head)
+│   │   ├── conductor_job_run/                      one row per attempt (per-attempt audit)
+│   │   ├── conductor_dlq_entry/                    dead-letter rows
+│   │   ├── conductor_schedule/                     cron schedules
+│   │   ├── conductor_worker/                       worker registration + heartbeat
+│   │   ├── conductor_workflow/                     workflow definition snapshot
+│   │   ├── conductor_workflow_run/                 one row per workflow run
+│   │   └── conductor_workflow_step_run/            one row per step attempt (incl. compensations)
+│   ├── workflow/                                   DAG runner
+│   │   ├── decorator.py                            @workflow + Step descriptors
+│   │   ├── dispatcher.py                           run_workflow entrypoint
+│   │   ├── advancer.py                             post-step DAG re-evaluation
+│   │   ├── topo.py                                 topological sort + cycle detection
+│   │   ├── lua.py                                  fan-in dependency counter (single-key)
+│   │   ├── snapshot.py                             definition versioning (immutable per run)
+│   │   ├── idempotency.py                          per-step idempotency keys
+│   │   ├── cancellation.py                         cancel_workflow_run
+│   │   ├── worker_hooks.py                         step lifecycle hooks called from worker
+│   │   └── keys.py                                 Redis key namespacing
+│   ├── config/                                     site-config loader
+│   ├── patches/                                    one-shot migrations run on `bench migrate`
+│   ├── public/                                     static assets served by Frappe
+│   ├── templates/                                  Frappe Jinja templates
+│   ├── www/                                        public routes (e.g. /conductor-dashboard)
+│   ├── dispatcher.py                               write Job row → idem lock → XADD → publish
+│   ├── worker.py                                   XREADGROUP loop + execution lock + retry/DLQ
+│   ├── scheduler.py                                leader election + lock renewer
+│   ├── scheduler_loops.py                          delay drainer, cron loop, reaper, drift correction
+│   ├── retry.py                                    RetryPolicy + backoff strategies
+│   ├── messages.py                                 stream message schema (encode/decode)
+│   ├── streams.py                                  per-(site, queue) stream key + consumer group
+│   ├── rate_limit.py / rate_limit.lua              per-(site, queue) token bucket
+│   ├── inflight.py / inflight.lua                  per-(site, queue) concurrency cap
+│   ├── execution_lock.py                           per-job lock around user code
+│   ├── idempotency.py                              dispatch-time idempotency lock
+│   ├── scheduler_lock.py                           scheduler leader lock
+│   ├── cancellation.py                             cooperative cancel API
+│   ├── decorator.py                                @conductor.job decorator + metadata
+│   ├── client.py                                   Redis client factory
+│   ├── frappe_compat.py                            opt-in shim for `frappe.enqueue`
+│   ├── migrate_rq.py                               implementation behind `bench conductor migrate-from-rq`
+│   ├── site_discovery.py                          enumerate conductor-installed sites for pool mode
+│   ├── sweeper.py                                  stream MAXLEN / XTRIM
+│   ├── kpi_workload.py                             test fixtures shared with comparative harness
+│   ├── demo.py                                     functions used by `doctor --demo` and chaos tests
+│   ├── context.py                                  per-job context (job_id, attempt, deadline, cancel)
+│   ├── cron.py                                     cron expression evaluation
+│   ├── scheduled.py                                scheduled-set helpers
+│   ├── serialization.py                            msgpack / base64 wrappers
+│   ├── logging.py                                  structlog setup
+│   ├── doctor.py                                   doctor command implementation
+│   ├── install.py                                  fixtures + post-install hooks
+│   └── hooks.py                                    Frappe app manifest
+├── dashboard/                                      Vue 3 + Vite SPA served at /conductor-dashboard
+│   ├── src/
+│   │   ├── App.vue, main.js, router.js, app.css   shell + routing + Tailwind v4 entry
+│   │   ├── api.js                                  REST client (calls conductor/api/*)
+│   │   ├── realtime.js                             Frappe socketio subscription
+│   │   ├── pages/                                  one component per route
+│   │   ├── components/                             shared UI (badges, tables, dialogs)
+│   │   └── stores/                                 Pinia stores
+│   ├── index.html, vite.config.js, package.json
+├── docs/                                           Diátaxis user docs
+│   ├── tutorial-getting-started.md
+│   ├── how-to-*.md                                 enqueue, schedule, triage, multi-tenant, RQ migration, workflows
+│   ├── reference-cli.md                            every `bench conductor` subcommand
+│   ├── reference-configuration.md                  every site_config / env knob
+│   ├── reference-python-api.md                     enqueue / job / RetryPolicy / workflow API
+│   ├── explanation-architecture.md                 dispatcher / worker / scheduler topology
+│   ├── explanation-reliability.md                  state machine + invariants
+│   ├── explanation-why-conductor.md                Conductor vs RQ KPI summary
+│   ├── index.md                                    docs landing page
+│   └── roadmap/v1.md                               what shipped per milestone
+├── tests/                                          unit + integration tests (run under bench env pytest)
+│   ├── benchmarks/                                 non-gating perf measurements
+│   └── comparative/                                Conductor-vs-RQ KPI harness
+├── tests_chaos/                                    subprocess-spawning chaos suite (kill -9, reclaim, etc.)
+├── pyproject.toml                                  Python package metadata + ruff config
+├── package.json                                    `yarn build` proxy that builds the dashboard
+├── pytest.ini, .pre-commit-config.yaml, .eslintrc, .editorconfig
+├── Procfile.conductor                              sample bench Procfile entries
+└── README.md, license.txt, claude.md
+```
+
+### Where to look first
+
+- **Adding a new CLI subcommand** → `conductor/commands/<name>.py` + register in `hooks.py`.
+- **Adding a DocType field** → `conductor/conductor/doctype/<doctype>/<doctype>.json` + matching controller; write a patch under `conductor/patches/` if existing rows need backfill.
+- **Changing job lifecycle behavior** → `conductor/worker.py` (execution) or `conductor/dispatcher.py` (dispatch).
+- **Changing scheduling** → `conductor/scheduler_loops.py`.
+- **Workflow changes** → `conductor/workflow/`.
+- **Dashboard changes** → frontend in `dashboard/src/`, server endpoints in `conductor/api/dashboard.py`.
+- **Tests** → unit/integration in `tests/`, chaos (real subprocesses, real Redis) in `tests_chaos/`.
+
+### Run locally
+
+- Tests: `/Users/osamamuhammed/frappe_15/env/bin/pytest tests` (the bench virtualenv, not bare `pytest`).
+- Dashboard build: `yarn build` from repo root (delegates to `dashboard/`).
+- Worker: `bench --site <site> conductor worker --queue default`.
+- Scheduler: `bench --site <site> conductor scheduler`.
+- Health check: `bench --site <site> conductor doctor [--demo]`.

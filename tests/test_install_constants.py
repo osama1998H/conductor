@@ -5,7 +5,7 @@ from conductor.install import DEFAULT_QUEUES
 
 def test_workflow_queue_is_seeded():
     names = {q["queue_name"] for q in DEFAULT_QUEUES}
-    assert "workflow" in names, "Phase 5 needs a 'workflow' queue for advancer/compensator jobs"
+    assert "workflow" in names, "workflows need a 'workflow' queue for advancer/compensator jobs"
 
 
 def test_workflow_queue_concurrency_is_at_least_4():

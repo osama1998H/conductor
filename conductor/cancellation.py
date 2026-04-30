@@ -1,4 +1,4 @@
-"""Public cancellation API. Cooperative model — see Phase 1 spec §12.3.
+"""Public cancellation API. Cooperative model.
 
 cancel(job_id):
   - terminal status → return False

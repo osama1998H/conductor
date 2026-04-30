@@ -76,10 +76,10 @@ def test_optional_fields_default_to_empty_string_or_none():
     assert decoded.deadline is None
 
 
-def test_phase1_optional_fields_default_empty_decode_phase0_message():
-    """A Phase-0-shaped encoded dict (no phase-1 fields) must decode cleanly."""
+def test_legacy_message_without_retry_policy_fields_decodes_cleanly():
+    """An older encoded dict that predates the retry-policy fields must still decode."""
     encoded = encode(_sample_message())
-    # Simulate a Phase 0 producer: strip Phase 1 keys.
+    # Simulate an older producer: strip the retry-policy keys.
     for k in ("backoff", "base_delay_seconds", "max_delay_seconds", "jitter",
              "retry_on_names", "no_retry_on_names"):
         encoded.pop(k, None)
@@ -92,7 +92,7 @@ def test_phase1_optional_fields_default_empty_decode_phase0_message():
     assert decoded.no_retry_on_names == []
 
 
-def test_phase1_fields_roundtrip():
+def test_retry_policy_fields_roundtrip():
     msg = _sample_message().replace(
         backoff="exponential",
         base_delay_seconds=5,
@@ -113,7 +113,7 @@ def test_phase1_fields_roundtrip():
     assert decoded.idempotency_key == "invoice:INV-001:email"
 
 
-def test_phase1_encoded_fields_remain_str_to_str():
+def test_retry_policy_encoded_fields_remain_str_to_str():
     encoded = encode(_sample_message().replace(
         retry_on_names=["builtins.RuntimeError"],
         no_retry_on_names=[],

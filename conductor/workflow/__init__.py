@@ -1,7 +1,4 @@
-"""Conductor Phase 5 — Workflow public API.
-
-Spec: docs/superpowers/specs/2026-04-29-conductor-phase5-workflows-design.md
-"""
+"""Conductor workflow public API."""
 
 from conductor.workflow.cancellation import cancel_workflow_run
 from conductor.workflow.decorator import (

@@ -2,15 +2,15 @@
 scheduler` as subprocesses so we can kill -9 them mid-job and verify reclaim
 + retry semantics.
 
-Phase 2 changes:
+Highlights:
   - autouse `spawn_scheduler` fixture: every chaos test gets a scheduler
-    process running by default (because Phase 2 worker no longer drains the
-    scheduled set).
+    process running by default (the worker no longer drains the scheduled
+    set — that lives in the scheduler).
   - per-test teardown: `XGROUP DESTROY` every consumer group on every conductor
-    stream key before deletion — scrubs PEL stale message-IDs that survived
-    `r.delete(key)` (master Phase 2 hand-off §3 #2 hypothesis).
-  - tighter subprocess teardown: poll until the process group is empty before
-    moving on (master Phase 2 hand-off §3 #1).
+    stream key before deletion — scrubs PEL stale message-IDs that survive
+    `r.delete(key)`.
+  - tight subprocess teardown: poll until the process group is empty before
+    moving on, so a slow exit cannot leak state into the next test.
 """
 
 from __future__ import annotations
@@ -87,8 +87,8 @@ def _frappe_init(site):
 def _wipe_conductor_state_per_test(site):
     """Per-test: wipe Conductor Redis keys + DocType rows BEFORE each test.
 
-    Includes XGROUP DESTROY to scrub PEL state — addresses the residual flake
-    hypothesis from master Phase 2 hand-off §3 #2."""
+    Includes XGROUP DESTROY to scrub PEL state so stale pending message IDs
+    cannot leak across tests."""
     _wipe_conductor_state(site)
     yield
     # Post-test: same wipe, so no state leaks to the next test even if a
@@ -127,8 +127,9 @@ def _terminate_pgroup(proc: subprocess.Popen, timeout: float = 5.0) -> None:
 
 @pytest.fixture
 def spawn_worker(site):
-    """Spawn `bench --site SITE conductor worker` as a subprocess. Tightened
-    teardown polls until the process group is empty (Phase 2 fix)."""
+    """Spawn `bench --site SITE conductor worker` as a subprocess. Teardown
+    polls until the process group is empty so a slow worker shutdown cannot
+    leak state into the next test."""
     procs: list[subprocess.Popen] = []
 
     @contextmanager
@@ -162,11 +163,10 @@ def spawn_worker(site):
 def spawn_scheduler(site):
     """AUTO-spawn a scheduler subprocess for every chaos test.
 
-    Phase 1 chaos tests rely on the worker's DelayDrainer to fire retries.
-    Phase 2 lifts that to the scheduler — every chaos test now needs the
-    scheduler running by default. Tests that want to exercise scheduler
-    death (test_scheduler_handoff) override this fixture with their own
-    spawn pattern."""
+    The scheduler owns the delay drainer, so any chaos test that exercises
+    retries needs the scheduler running. Tests that want to exercise scheduler
+    death (test_scheduler_handoff) override this fixture with their own spawn
+    pattern."""
     cmd = [
         "bench", "--site", site, "conductor", "scheduler",
         "--lock-ttl-seconds=3",

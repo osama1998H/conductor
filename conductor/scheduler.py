@@ -80,7 +80,7 @@ def run_scheduler_lifecycle(
     stop_event = stop_event or threading.Event()
     lost_lock_event = lost_lock_event_for_test or threading.Event()
 
-    # Phase 1: poll for the lock.
+    # Poll until we win the leader lock (or are told to stop).
     while not stop_event.is_set():
         if acquire(redis_client, site, instance_id, ttl=lock_ttl_seconds):
             break
@@ -92,7 +92,7 @@ def run_scheduler_lifecycle(
     if started_event:
         started_event.set()
 
-    # Phase 2: run the renewer + (later) the four loops.
+    # Start the lock renewer alongside the four scheduler loops.
     renewer = threading.Thread(
         target=_renewer,
         kwargs=dict(

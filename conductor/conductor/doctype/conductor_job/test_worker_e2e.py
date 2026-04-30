@@ -46,11 +46,11 @@ class TestWorkerE2E(FrappeTestCase):
 
     def test_records_failure(self):
         # max_attempts=1 → no retry → immediate DLQ on first failure.
-        # Phase 1 moves error fields from Job to the per-attempt Conductor Job Run row.
+        # Error fields live on the per-attempt Conductor Job Run row, not on Job.
         job_id = conductor.enqueue("conductor.demo.boom", queue="default", max_attempts=1)
         run_worker_once(queues=["default"], concurrency=2, site=frappe.local.site, block_ms=2000)
         self._wait_for_status(job_id, "DLQ")
-        # Error detail lives on the Conductor Job Run row (Phase 1 state machine).
+        # Error detail lives on the Conductor Job Run row.
         runs = frappe.get_all(
             "Conductor Job Run",
             filters={"job": job_id},

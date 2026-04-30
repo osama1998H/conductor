@@ -29,8 +29,8 @@
   {"fieldname": "default_base_delay_seconds", "fieldtype": "Int", "label": "Default Base Delay (seconds)", "default": "2"},
   {"fieldname": "default_max_delay_seconds", "fieldtype": "Int", "label": "Default Max Delay (seconds)", "default": "600"},
   {"fieldname": "default_jitter", "fieldtype": "Select", "label": "Default Jitter", "options": "none\nfull\nequal", "default": "full"},
-  {"fieldname": "max_rps", "fieldtype": "Int", "label": "Max RPS (0 = unlimited)", "default": "0", "description": "Per-(site, queue) rate limit in jobs per second. 0 disables. Phase 6."},
-  {"fieldname": "max_concurrent", "fieldtype": "Int", "label": "Max Concurrent (0 = unlimited)", "default": "0", "description": "Per-(site, queue) cap on simultaneously RUNNING jobs across the fleet. 0 disables. Phase 6."},
+  {"fieldname": "max_rps", "fieldtype": "Int", "label": "Max RPS (0 = unlimited)", "default": "0", "description": "Per-(site, queue) rate limit in jobs per second. 0 disables."},
+  {"fieldname": "max_concurrent", "fieldtype": "Int", "label": "Max Concurrent (0 = unlimited)", "default": "0", "description": "Per-(site, queue) cap on simultaneously RUNNING jobs across the fleet. 0 disables."},
   {"fieldname": "description", "fieldtype": "Small Text", "label": "Description"}
  ],
  "links": [],

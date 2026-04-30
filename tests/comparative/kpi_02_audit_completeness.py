@@ -7,8 +7,8 @@ it — without leaving the database?
 Workload: 50 jobs of `always_fail`. Each runs to terminal failure. We
 then count per-attempt records on each side.
 
-Conductor: each attempt produces a `Conductor Job Run` row (Phase 1 spec
-P1-15). With queue default_max_attempts=3, expect 150 rows.
+Conductor: each attempt produces a `Conductor Job Run` row.
+With queue default_max_attempts=3, expect 150 rows.
 
 RQ: the `failed` registry stores one record per *job* (the last
 exception only). Intermediate retry attempts (RQ retries only on DB

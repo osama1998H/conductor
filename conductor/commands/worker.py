@@ -1,8 +1,8 @@
 """bench conductor worker — run a long-lived worker process.
 
-Single-site (today's default): bench --site=X conductor worker
-Pool mode (Phase 6):           bench conductor worker --sites=auto
-                               bench conductor worker --sites=A,B,C
+Single-site:   bench --site=X conductor worker
+Pool mode:     bench conductor worker --sites=auto
+               bench conductor worker --sites=A,B,C
 """
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-"""Phase 6 exit criterion #1: pool worker survives kill -9 across 3 sites.
+"""Pool-worker chaos: pool worker survives kill -9 across 3 sites.
 
 Boots a pool worker for 3 fixture sites (frappe.localhost + 2 transient).
 Dispatches 30 jobs total (10 per site). Kills the pool worker mid-run.
@@ -19,7 +19,7 @@ import pytest
 
 BENCH_ROOT = Path("/Users/osamamuhammed/frappe_15")
 PRIMARY_SITE = "frappe.localhost"
-EXTRA_SITES = ["alpha.phase6.test", "beta.phase6.test"]
+EXTRA_SITES = ["alpha.pool.test", "beta.pool.test"]
 
 
 def _site_exists(site: str) -> bool:

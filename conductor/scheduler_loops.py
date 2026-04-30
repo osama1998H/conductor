@@ -3,7 +3,7 @@
 Each loop is a daemon thread that catches per-iteration exceptions and logs
 them, so a transient DB or Redis failure never kills the scheduler. Each
 iteration opens its own frappe.init/connect → … → frappe.db.commit() →
-frappe.destroy() cycle (the Werkzeug-Local rule from Phase 1 hand-off §5).
+frappe.destroy() cycle to keep Werkzeug-Local thread state isolated per pass.
 """
 
 from __future__ import annotations
@@ -147,13 +147,14 @@ def _reaper_loop_iter(site: str, frappe) -> list[str]:
     """One reaper pass: mark STALE/GONE based on heartbeat age, prune old rows.
 
     Returns the list of worker IDs flipped to GONE in this pass so the caller
-    can drift-correct their inflight counters (Phase 6)."""
+    can drift-correct their inflight counters."""
     now = datetime.now()
     gone_cut = now - timedelta(seconds=REAPER_GONE_AGE_SECONDS)
     stale_cut = now - timedelta(seconds=REAPER_STALE_AGE_SECONDS)
     prune_cut = now - timedelta(seconds=REAPER_PRUNE_AGE_SECONDS)
 
-    # Phase 6: capture the worker IDs about to flip GONE before mutating.
+    # Capture the worker IDs about to flip GONE before mutating, so callers can
+    # drift-correct the rate-limit/concurrency counters those workers held.
     just_gone_rows = frappe.db.sql(
         "SELECT worker_id FROM `tabConductor Worker` "
         "WHERE site=%s AND status<>'GONE' AND last_heartbeat < %s",

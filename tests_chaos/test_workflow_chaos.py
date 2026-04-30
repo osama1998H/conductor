@@ -1,4 +1,4 @@
-"""Phase 5 chaos: diamond DAG runs to SUCCEEDED through real worker subprocesses."""
+"""Workflow chaos: diamond DAG runs to SUCCEEDED through real worker subprocesses."""
 
 from __future__ import annotations
 
@@ -63,13 +63,12 @@ def test_diamond_runs_to_success_through_real_workers(site, spawn_worker):
 
 
 def test_diamond_c_terminal_fail_compensates_a(site, spawn_worker):
-    """Master Phase-5 exit criterion (§4):
-       4-step workflow A → {B, C} → D; C fails terminally → A's compensation
-       runs in reverse-topo order; run lands FAILED."""
+    """4-step workflow A → {B, C} → D; C fails terminally → A's compensation
+    runs in reverse-topo order; run lands FAILED."""
     from conductor.workflow import run_workflow
 
-    frappe.cache().delete_value("phase5:undo_a:ran")
-    frappe.cache().delete_value("phase5:undo_b:ran")
+    frappe.cache().delete_value("conductor:demo:undo_a:ran")
+    frappe.cache().delete_value("conductor:demo:undo_b:ran")
 
     with spawn_worker(queue="default", concurrency=2):
         with spawn_worker(queue="workflow", concurrency=1):
@@ -90,7 +89,7 @@ def test_diamond_c_terminal_fail_compensates_a(site, spawn_worker):
 
     assert by_key.get(("a", 1)) == "COMPENSATED", \
         f"a's compensation did not run; rows={by_key}"
-    assert frappe.cache().get_value("phase5:undo_a:ran") == "1", \
+    assert frappe.cache().get_value("conductor:demo:undo_a:ran") == "1", \
         "undo_a side-effect not observed"
 
     if by_key.get(("b", 0)) == "SUCCEEDED":

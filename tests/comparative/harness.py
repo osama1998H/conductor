@@ -152,8 +152,8 @@ class ConductorEngine(Engine):
         self._scheduler = None
 
     def spawn_scheduler(self) -> int:
-        """Phase 2+: scheduler owns the delay-drain loop. KPIs that exercise
-        retries need this; KPIs that don't can skip it."""
+        """The scheduler owns the delay-drain loop. KPIs that exercise retries
+        need this; KPIs that don't can skip it."""
         p = subprocess.Popen(
             ["bench", "--site", SITE, "conductor", "scheduler"],
             cwd=str(BENCH_ROOT),

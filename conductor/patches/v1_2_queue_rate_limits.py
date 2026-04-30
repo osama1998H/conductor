@@ -1,4 +1,4 @@
-"""Phase 6 patch: backfill max_rps and max_concurrent on Conductor Queue rows.
+"""Backfill max_rps and max_concurrent on Conductor Queue rows.
 
 Frappe migrate adds the columns automatically from the JSON; this patch fills
 in 0 for any pre-existing rows whose new columns came back NULL on add. The
