@@ -177,8 +177,10 @@ commands = ["conductor.commands.conductor_group"]
 # ------------------------------
 #
 # Route HTTP /api/method/frappe.enqueue calls through Conductor's drop-in
-# wrapper. NOTE: this only intercepts HTTP API calls; intra-process Python
-# `frappe.enqueue(...)` calls still hit RQ directly. Per master §3 #13.
+# shim. In-process Python `frappe.enqueue(...)` calls are also routed when
+# `conductor_intercept_frappe_enqueue: true` is set in
+# common_site_config.json (installed by
+# conductor.frappe_compat.maybe_install_inprocess_patch on conductor import).
 override_whitelisted_methods = {
     "frappe.enqueue": "conductor.frappe_compat.enqueue",
 }
