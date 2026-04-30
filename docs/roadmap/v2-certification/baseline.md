@@ -103,7 +103,62 @@ site has conductor: True
 
 ## Bench process state after M1
 
-- `honcho start`, PID 53868
-- `bench --site frappe.localhost conductor worker --queue default --concurrency 4`, PID 53889
-- `bench --site frappe.localhost conductor scheduler`, PID 53890
+- `honcho start`, PID 62473 (post-pivot restart)
+- `bench --site frappe.localhost conductor worker --queue default --concurrency 4`, PID 62495
+- `bench --site frappe.localhost conductor scheduler`, PID 62494 (now runs the new `frappe_scheduled_loop` thread)
+- `bench schedule`, PID 62491 — running but **paused** via `pause_scheduler: 1`
 - No RQ `bench worker` process
+
+## M1 finding #2 — path A→B pivot (commits `0561cc4`, `7fbe354`)
+
+The first smoke test against the live bench demonstrated that the in-process
+`frappe.enqueue` patch does **not** catch Frappe scheduler ticks.
+`Scheduled Job Type.enqueue()` does `from frappe.utils.background_jobs
+import enqueue` at module load and calls that local binding — which the
+patch on `frappe.enqueue` never sees. The smoke run produced zero
+`Conductor Job` rows.
+
+Pivot: Conductor's scheduler grew a fifth daemon loop
+(`conductor/frappe_scheduled_loop.py`) that reads `tabScheduled Job Type`
+directly, calls each row's `is_event_due()` for the cron-math, and
+dispatches due rows through `conductor.dispatcher.enqueue`. No
+monkey-patching. Frappe's own scheduler is paused via the bench-wide
+`pause_scheduler: 1` flag.
+
+The in-process patch ships and stays as a complementary catch-net for
+direct in-process callers (application code, custom scripts, request
+handlers) but is no longer the primary mechanism for scheduler ticks.
+
+## M1 smoke (Task 8) — passes
+
+After enabling `conductor_take_over_frappe_scheduler: true` and restarting
+bench, the new loop fired on its first tick. From `conductor_scheduler.log`
+at 2026-04-30T16:59:17Z:
+
+```
+event=frappe_scheduled_loop_started
+event=job_enqueued ... (×14)
+event=frappe_scheduled_loop_fired count=14
+```
+
+MariaDB confirms 14 Conductor Job rows created, all `SUCCEEDED` after one
+attempt:
+
+| method | status |
+|---|---|
+| erpnext.manufacturing.doctype.bom_update_log.bom_update_log.resume_bom_cost_update_jobs | SUCCEEDED |
+| frappe.automation.doctype.reminder.reminder.send_reminders | SUCCEEDED |
+| frappe.deferred_insert.save_to_db | SUCCEEDED |
+| frappe.email.doctype.email_account.email_account.notify_unreplied | SUCCEEDED |
+| frappe.email.doctype.email_account.email_account.pull | SUCCEEDED |
+| frappe.email.queue.flush | SUCCEEDED |
+| frappe.email.queue.retry_sending_emails | SUCCEEDED |
+| frappe.integrations.doctype.google_calendar.google_calendar.sync | SUCCEEDED |
+| frappe.model.utils.link_count.update_link_count | SUCCEEDED |
+| frappe.monitor.flush | SUCCEEDED |
+| frappe.search.sqlite_search.build_index_if_not_exists | SUCCEEDED |
+| frappe.utils.global_search.sync_global_search | SUCCEEDED |
+| frappe.utils.telemetry.pulse.client.send_queued_events | SUCCEEDED |
+| hrms.hr.doctype.interview.interview.send_interview_reminder | SUCCEEDED |
+
+End-to-end through Conductor: 14/14. Path B is verified live.
