@@ -1,10 +1,10 @@
 <template>
   <div class="space-y-3">
     <div class="flex gap-2">
-      <Select :model-value="filters.status" @update:model-value="(v) => emitFilter('status', v ?? '')">
-        <SelectTrigger class="w-[200px]"><SelectValue /></SelectTrigger>
+      <Select :model-value="filters.status || ALL_STATUSES" @update:model-value="(v) => emitFilter('status', v === ALL_STATUSES ? '' : (v ?? ''))">
+        <SelectTrigger class="w-[200px]"><SelectValue placeholder="All statuses" /></SelectTrigger>
         <SelectContent>
-          <SelectItem value="">All statuses</SelectItem>
+          <SelectItem :value="ALL_STATUSES">All statuses</SelectItem>
           <SelectItem value="PENDING_REVIEW">Pending review</SelectItem>
           <SelectItem value="RETRIED">Retried</SelectItem>
           <SelectItem value="DISCARDED">Discarded</SelectItem>
@@ -98,6 +98,8 @@ const props = defineProps({
   selectedId: { type: String, default: "" },
 });
 const emit = defineEmits(["select", "toggle-select", "refresh", "filters-change"]);
+
+const ALL_STATUSES = "__all__";
 
 function emitFilter(key, value) {
   emit("filters-change", { ...props.filters, [key]: value });
