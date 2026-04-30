@@ -55,3 +55,38 @@ def test_ensure_consumer_group_propagates_other_errors(monkeypatch, fake_redis):
     monkeypatch.setattr(fake_redis, "xgroup_create", boom)
     with pytest.raises(redis_mod.exceptions.ResponseError, match="something else"):
         ensure_consumer_group(fake_redis, stream_key("test.local", "default"))
+
+
+# Stream-key → site routing for the pool worker.
+from conductor.streams import parse_site_from_stream_key
+
+
+def test_parse_site_from_stream_key_round_trip():
+    skey = stream_key("frappe.localhost", "default")
+    assert parse_site_from_stream_key(skey) == "frappe.localhost"
+
+
+def test_parse_site_handles_dotted_site_names():
+    skey = stream_key("alpha.tenant.example.com", "long")
+    assert parse_site_from_stream_key(skey) == "alpha.tenant.example.com"
+
+
+def test_parse_site_handles_queue_named_with_colons_unlikely_but_robust():
+    # We don't allow colons in queue names by convention, but the parser is
+    # written to take everything BEFORE :stream: as site.
+    skey = "conductor:site.example:stream:default"
+    assert parse_site_from_stream_key(skey) == "site.example"
+
+
+def test_parse_site_raises_on_bytes_input():
+    with pytest.raises(TypeError):
+        parse_site_from_stream_key(b"conductor:s:stream:q")
+
+
+def test_parse_site_raises_on_malformed_key():
+    with pytest.raises(ValueError, match="not a conductor stream key"):
+        parse_site_from_stream_key("conductor:foo:bar")
+    with pytest.raises(ValueError, match="not a conductor stream key"):
+        parse_site_from_stream_key("conductor:site:dlq:default")  # DLQ, not stream
+    with pytest.raises(ValueError, match="not a conductor stream key"):
+        parse_site_from_stream_key("redis:other:stream:foo")

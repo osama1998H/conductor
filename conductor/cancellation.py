@@ -1,4 +1,4 @@
-"""Public cancellation API. Cooperative model — see Phase 1 spec §12.3.
+"""Public cancellation API. Cooperative model.
 
 cancel(job_id):
   - terminal status → return False
@@ -17,6 +17,7 @@ import frappe
 from conductor.client import get_redis
 from conductor.config import load_config
 from conductor.logging import get_logger
+from conductor.messages import emit_job_event
 from conductor.scheduled import scheduled_redis_key
 from conductor.streams import stream_key
 
@@ -62,5 +63,10 @@ def cancel(job_id: str) -> bool:
             except Exception:
                 continue
 
+    emit_job_event(job_id, "CANCELLED")
     log.info("job_cancelled", job_id=job_id, prior_status=current)
     return True
+
+
+# Alias for workflow cancellation to reference as cancel_job
+cancel_job = cancel

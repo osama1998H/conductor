@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Conductor</title>
+    <script type="module" crossorigin src="/assets/conductor/dashboard/assets/index-BE1oTkIf.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/conductor/dashboard/assets/index-uFiQborA.css">
+  </head>
+  <body>
+    <div id="app"></div>
+    <script>
+      // Frappe Jinja-renders the literal `{{ csrf_token }}` server-side at /conductor-dashboard.
+      // During `vite dev` this stays as the literal string; the SPA guards against that.
+      window.csrf_token = "{{ csrf_token }}";
+    </script>
+  </body>
+</html>

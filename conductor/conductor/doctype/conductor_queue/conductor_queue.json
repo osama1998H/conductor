@@ -15,6 +15,8 @@
   "default_base_delay_seconds",
   "default_max_delay_seconds",
   "default_jitter",
+  "max_rps",
+  "max_concurrent",
   "description"
  ],
  "fields": [
@@ -27,10 +29,12 @@
   {"fieldname": "default_base_delay_seconds", "fieldtype": "Int", "label": "Default Base Delay (seconds)", "default": "2"},
   {"fieldname": "default_max_delay_seconds", "fieldtype": "Int", "label": "Default Max Delay (seconds)", "default": "600"},
   {"fieldname": "default_jitter", "fieldtype": "Select", "label": "Default Jitter", "options": "none\nfull\nequal", "default": "full"},
+  {"fieldname": "max_rps", "fieldtype": "Int", "label": "Max RPS (0 = unlimited)", "default": "0", "description": "Per-(site, queue) rate limit in jobs per second. 0 disables."},
+  {"fieldname": "max_concurrent", "fieldtype": "Int", "label": "Max Concurrent (0 = unlimited)", "default": "0", "description": "Per-(site, queue) cap on simultaneously RUNNING jobs across the fleet. 0 disables."},
   {"fieldname": "description", "fieldtype": "Small Text", "label": "Description"}
  ],
  "links": [],
- "modified": "2026-04-27 00:00:00",
+ "modified": "2026-04-29 00:00:00",
  "modified_by": "Administrator",
  "module": "Conductor",
  "name": "Conductor Queue",

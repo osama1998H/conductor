@@ -29,7 +29,7 @@ from tests_chaos.conftest import wait_for_status
 def test_kill_during_run_reclaims_and_completes(spawn_worker):
     """Worker A spawns alone, claims the slow job, dies. Worker B then comes up
     and must XAUTOCLAIM the orphaned message and complete it."""
-    # Phase 1: worker A alone. It will claim the job because it's the only
+    # Worker A alone. It will claim the job because it's the only
     # consumer in the group with `>` outstanding.
     with spawn_worker() as worker_a:
         job_id = conductor.enqueue("conductor.demo.slow_chaos", queue="default", timeout=20)
@@ -42,17 +42,33 @@ def test_kill_during_run_reclaims_and_completes(spawn_worker):
         except (ProcessLookupError, PermissionError):
             pass
 
-    # Phase 2: worker B comes up and must reclaim A's orphaned pending entry.
+    # Worker B comes up and must reclaim A's orphaned pending entry.
     # Lock TTL = 5s (already expired since kill happened ≥3s ago + B startup);
     # autoclaim idle = 8s, so B's first iteration after spawn-warmup may
     # need to wait until t ~= 8s after A claimed. We give 90s total to be safe.
     with spawn_worker() as worker_b:
-        final = wait_for_status(job_id, "SUCCEEDED", timeout=90)
+        # Generous timeout: XAUTOCLAIM idle window (8s) + slow_chaos sleep (8s)
+        # + worker B startup + Frappe DB overhead. On a busy host the chain
+        # can run 30-60s. We allow 180s to absorb noise without compromising
+        # the correctness invariant (the test still detects "never reclaimed").
+        final = wait_for_status(job_id, "SUCCEEDED", timeout=180)
         assert final == "SUCCEEDED", f"expected SUCCEEDED, got {final}"
 
-        runs = frappe.get_all(
-            "Conductor Job Run", filters={"job": job_id}, fields=["name", "status"]
-        )
+        # The worker subprocess commits Job=SUCCEEDED before it commits the
+        # matching Conductor Job Run row (two separate transactions in
+        # _handle_one). wait_for_status returns on the first commit, so the
+        # Job Run write may still be in flight here. Poll generously — under
+        # full-suite load the second commit can lag by several seconds.
+        deadline = time.time() + 30
+        runs = []
+        while time.time() < deadline:
+            frappe.db.rollback()
+            runs = frappe.get_all(
+                "Conductor Job Run", filters={"job": job_id}, fields=["name", "status"]
+            )
+            if any(r.status == "SUCCEEDED" for r in runs):
+                break
+            time.sleep(0.2)
         assert any(r.status == "SUCCEEDED" for r in runs), runs
 
         for r in runs:

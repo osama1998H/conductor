@@ -5,3 +5,8 @@
 tags
 node_modules
 __pycache__
+.superpowers/
+conductor/public/dashboard/
+conductor/www/conductor-dashboard.html
+dashboard/node_modules/
+dashboard/dist/

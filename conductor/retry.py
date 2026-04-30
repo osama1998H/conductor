@@ -3,8 +3,8 @@
 A policy decides (a) how long to wait before the next retry of a given attempt,
 and (b) whether a given exception should be retried at all.
 
-Stamped into the JobMessage at dispatch time (master Phase 1 spec §3 P1-4) so
-in-flight retries stay pinned to their dispatch-time policy across redeploys.
+Stamped into the JobMessage at dispatch time so in-flight retries stay pinned
+to their dispatch-time policy across redeploys.
 """
 
 from __future__ import annotations

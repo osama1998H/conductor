@@ -8,9 +8,7 @@
  "field_order": [
   "job", "attempt_number", "status", "worker_id",
   "section_timing", "started_at", "finished_at", "duration_ms",
-  "section_error", "error_type", "error_message", "traceback",
-  "section_otel", "trace_id", "span_id",
-  "section_sentry", "sentry_event_id", "sentry_url"
+  "section_error", "error_type", "error_message", "traceback"
  ],
  "fields": [
   {"fieldname": "job", "fieldtype": "Link", "options": "Conductor Job", "label": "Job", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
@@ -26,15 +24,7 @@
   {"fieldname": "section_error", "fieldtype": "Section Break", "label": "Error"},
   {"fieldname": "error_type", "fieldtype": "Data", "label": "Error Type"},
   {"fieldname": "error_message", "fieldtype": "Small Text", "label": "Error Message"},
-  {"fieldname": "traceback", "fieldtype": "Long Text", "label": "Traceback"},
-
-  {"fieldname": "section_otel", "fieldtype": "Section Break", "label": "OpenTelemetry"},
-  {"fieldname": "trace_id", "fieldtype": "Data", "label": "Trace ID"},
-  {"fieldname": "span_id", "fieldtype": "Data", "label": "Span ID"},
-
-  {"fieldname": "section_sentry", "fieldtype": "Section Break", "label": "Sentry (Phase 4)"},
-  {"fieldname": "sentry_event_id", "fieldtype": "Data", "label": "Sentry Event ID"},
-  {"fieldname": "sentry_url", "fieldtype": "Data", "label": "Sentry URL"}
+  {"fieldname": "traceback", "fieldtype": "Long Text", "label": "Traceback"}
  ],
  "links": [],
  "modified": "2026-04-27 00:00:00",

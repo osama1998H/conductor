@@ -16,6 +16,14 @@ def boom(**kwargs: Any) -> None:
     raise RuntimeError(f"intentional failure (kwargs={kwargs!r})")
 
 
+def sleep(seconds: float = 0.1, **kwargs: Any) -> None:
+    """Sleep for `seconds`, then return. Used by the rate-limit chaos test:
+    `time.sleep` cannot be invoked directly because `frappe.get_attr` treats
+    the first dotted segment as an app name."""
+    import time
+    time.sleep(seconds)
+
+
 def slow_chaos(**kwargs: Any) -> dict:
     """Sleeps long enough for a kill -9 to interrupt mid-execution.
 
@@ -28,3 +36,62 @@ def slow_chaos(**kwargs: Any) -> dict:
     import time
     time.sleep(8)
     return {"completed": True}
+
+
+# Workflow demos for chaos tests — must live here so worker subprocesses can
+# import the class via frappe.get_attr (the test process cannot give the
+# worker a class defined inside a test function).
+from conductor.workflow import Step, workflow
+
+
+@workflow(name="DemoDiamond", queue="default")
+class DemoDiamond:
+    """Diamond DAG: a → {b, c} → d. Used by workflow chaos tests."""
+
+    _a = Step("a")
+    _b = Step("b", depends_on=("a",))
+    _c = Step("c", depends_on=("a",))
+    _d = Step("d", depends_on=("b", "c"))
+
+    def a(self, **kwargs: Any) -> None:
+        pass
+
+    def b(self, **kwargs: Any) -> None:
+        pass
+
+    def c(self, **kwargs: Any) -> None:
+        pass
+
+    def d(self, **kwargs: Any) -> None:
+        pass
+
+
+@workflow(name="DemoCompensatingDiamond", queue="default")
+class DemoCompensatingDiamond:
+    """Diamond DAG with compensations on a and b. Step c fails terminally
+    after retries. Used by the workflow compensation chaos test."""
+
+    _a = Step("a", compensation="undo_a")
+    _b = Step("b", depends_on=("a",), compensation="undo_b")
+    _c = Step("c", depends_on=("a",))
+    _d = Step("d", depends_on=("b", "c"))
+
+    def a(self, **kwargs: Any) -> None:
+        pass
+
+    def undo_a(self, **kwargs: Any) -> None:
+        import frappe
+        frappe.cache().set_value("conductor:demo:undo_a:ran", "1")
+
+    def b(self, **kwargs: Any) -> None:
+        pass
+
+    def undo_b(self, **kwargs: Any) -> None:
+        import frappe
+        frappe.cache().set_value("conductor:demo:undo_b:ran", "1")
+
+    def c(self, **kwargs: Any) -> None:
+        raise RuntimeError("forced terminal failure for compensation chaos test")
+
+    def d(self, **kwargs: Any) -> None:
+        pass

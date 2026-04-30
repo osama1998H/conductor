@@ -3,24 +3,58 @@
 A stream message is a flat str→str dict (Redis Streams field values are
 ASCII-safe strings). args/kwargs are msgpack-then-base64 encoded.
 
-Phase 1 adds optional retry-policy + idempotency fields. Decoder treats
-missing fields as empty/zero defaults — backward-compatible with Phase 0
-messages still in queues during a rolling deploy. No schema_version bump.
+Retry-policy and idempotency fields are optional. The decoder treats missing
+fields as empty/zero defaults so older in-flight messages stay readable
+across rolling deploys without a schema_version bump.
 """
 
 from __future__ import annotations
 
 import base64
 import json
+import time
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any
+
+import frappe
 
 from conductor.serialization import dumps, loads
 
 SCHEMA_VERSION = 1
 
-# Required only for the original Phase 0 set; Phase 1 fields are optional.
+# Realtime payload field allowlist — matches spec §8.3. last_traceback is
+# deliberately excluded (can be tens of KB; the detail pane re-fetches
+# get_job() on terminal-state transitions to load it).
+_REALTIME_FIELDS = frozenset({
+    "attempt",
+    "max_attempts",
+    "queue",
+    "method",
+    "last_error_type",
+    "last_error_message",
+    "finished_at",
+    "next_run_at",
+})
+
+
+def emit_job_event(job_id: str, status: str, **fields) -> None:
+    payload = {"job_id": job_id, "status": status, "ts": int(time.time())}
+    for k, v in fields.items():
+        if k in _REALTIME_FIELDS and v is not None:
+            payload[k] = v
+    # doctype/docname scope delivery to the per-doc Socket.IO room
+    # (doc:Conductor Job/{job_id}); event= is only a label. See spec §8.6.1.
+    frappe.publish_realtime(
+        event=f"conductor:job:{job_id}",
+        message=payload,
+        doctype="Conductor Job",
+        docname=job_id,
+        after_commit=True,
+    )
+
+
+# Required core fields; the retry-policy fields below are optional.
 _REQUIRED_FIELDS = {
     "job_id",
     "site",
@@ -49,11 +83,10 @@ class JobMessage:
     timeout_seconds: int = 300
     enqueued_at: datetime | None = None
     deadline: datetime | None = None
-    trace_parent: str = ""
     idempotency_key: str = ""
     workflow_run_id: str = ""
     step_id: str = ""
-    # Phase 1 retry-policy fields (all optional).
+    # Retry-policy fields (all optional).
     backoff: str = ""
     base_delay_seconds: int = 0
     max_delay_seconds: int = 0
@@ -96,7 +129,6 @@ def encode(msg: JobMessage) -> dict[str, str]:
         "timeout_seconds": str(msg.timeout_seconds),
         "enqueued_at": _iso(msg.enqueued_at),
         "deadline": _iso(msg.deadline),
-        "trace_parent": msg.trace_parent or "",
         "idempotency_key": msg.idempotency_key or "",
         "workflow_run_id": msg.workflow_run_id or "",
         "step_id": msg.step_id or "",
@@ -142,7 +174,6 @@ def decode(fields_dict: dict[str, str]) -> JobMessage:
         timeout_seconds=int(fields_dict["timeout_seconds"]),
         enqueued_at=_parse_iso(fields_dict["enqueued_at"]),
         deadline=_parse_iso(fields_dict.get("deadline", "")),
-        trace_parent=fields_dict.get("trace_parent", ""),
         idempotency_key=fields_dict.get("idempotency_key", ""),
         workflow_run_id=fields_dict.get("workflow_run_id", ""),
         step_id=fields_dict.get("step_id", ""),
@@ -152,4 +183,28 @@ def decode(fields_dict: dict[str, str]) -> JobMessage:
         jitter=fields_dict.get("jitter", ""),
         retry_on_names=_maybe_list(fields_dict.get("retry_on_names", "")),
         no_retry_on_names=_maybe_list(fields_dict.get("no_retry_on_names", "")),
+    )
+
+
+_WORKFLOW_REALTIME_FIELDS = frozenset({
+    "workflow",
+    "definition_version",
+    "started_at",
+    "finished_at",
+    "last_error",
+})
+
+
+def emit_workflow_event(run_id: str, status: str, **fields) -> None:
+    """Publish a per-run realtime event scoped to the Workflow Run room."""
+    payload = {"run_id": run_id, "status": status, "ts": int(time.time())}
+    for k, v in fields.items():
+        if k in _WORKFLOW_REALTIME_FIELDS and v is not None:
+            payload[k] = v
+    frappe.publish_realtime(
+        event=f"conductor:workflow_run:{run_id}",
+        message=payload,
+        doctype="Conductor Workflow Run",
+        docname=run_id,
+        after_commit=True,
     )

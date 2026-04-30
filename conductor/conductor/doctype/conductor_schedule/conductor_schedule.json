@@ -1,0 +1,53 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "field:schedule_name",
+ "creation": "2026-04-27 00:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "schedule_name",
+  "enabled",
+  "cron_expression",
+  "timezone",
+  "method",
+  "queue",
+  "max_attempts",
+  "args",
+  "kwargs",
+  "last_run_at",
+  "last_status",
+  "last_job",
+  "next_run_at",
+  "description"
+ ],
+ "fields": [
+  {"fieldname": "schedule_name", "fieldtype": "Data", "label": "Schedule Name", "reqd": 1, "unique": 1, "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "enabled", "fieldtype": "Check", "label": "Enabled", "default": "1", "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "cron_expression", "fieldtype": "Data", "label": "Cron Expression", "reqd": 1, "in_list_view": 1, "description": "Standard 5-field cron, e.g. '0 9 * * *'. Macros @hourly/@daily/@weekly supported."},
+  {"fieldname": "timezone", "fieldtype": "Data", "label": "Timezone", "default": "UTC", "description": "IANA tz name, e.g. 'America/New_York'. Unknown values fall back to UTC."},
+  {"fieldname": "method", "fieldtype": "Data", "label": "Method", "reqd": 1, "description": "Dotted path, e.g. 'myapp.tasks.nightly_rollup'."},
+  {"fieldname": "queue", "fieldtype": "Link", "options": "Conductor Queue", "label": "Queue", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "max_attempts", "fieldtype": "Int", "label": "Max Attempts", "description": "Optional override; falls back to queue defaults."},
+  {"fieldname": "args", "fieldtype": "Long Text", "label": "Args (msgpack-base64)", "description": "Positional args. Always empty in v1; included for forward compatibility."},
+  {"fieldname": "kwargs", "fieldtype": "Long Text", "label": "Kwargs (msgpack-base64)", "description": "Keyword args, msgpack-then-base64."},
+  {"fieldname": "last_run_at", "fieldtype": "Datetime", "label": "Last Run At", "read_only": 1},
+  {"fieldname": "last_status", "fieldtype": "Select", "options": "\nDISPATCHED\nDISPATCH_FAILED", "label": "Last Status", "read_only": 1, "in_list_view": 1},
+  {"fieldname": "last_job", "fieldtype": "Link", "options": "Conductor Job", "label": "Last Job", "read_only": 1},
+  {"fieldname": "next_run_at", "fieldtype": "Datetime", "label": "Next Run At", "read_only": 1, "in_list_view": 1},
+  {"fieldname": "description", "fieldtype": "Small Text", "label": "Description"}
+ ],
+ "links": [],
+ "modified": "2026-04-27 00:00:00",
+ "modified_by": "Administrator",
+ "module": "Conductor",
+ "name": "Conductor Schedule",
+ "owner": "Administrator",
+ "permissions": [
+  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1, "report": 1, "export": 1},
+  {"role": "Conductor Operator", "read": 1, "report": 1, "export": 1}
+ ],
+ "sort_field": "schedule_name",
+ "sort_order": "ASC",
+ "track_changes": 1
+}
