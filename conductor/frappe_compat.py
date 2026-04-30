@@ -97,3 +97,22 @@ def uninstall_inprocess_patch() -> None:
     original = getattr(current, _ORIGINAL_ATTR, None)
     if original is not None:
         _frappe_module.enqueue = original
+
+
+def maybe_install_inprocess_patch() -> None:
+    """Install the in-process patch when the bench flag is set; otherwise no-op.
+
+    Reads the flag from `frappe.conf` (which Frappe builds by merging
+    common_site_config.json + the active site's site_config.json) so the
+    activation can be set bench-wide. Failures here MUST NOT break import:
+    the v1 HTTP shim still works without this bootstrap.
+    """
+    try:
+        conf = getattr(_frappe_module, "conf", None) or {}
+        if not conf.get("conductor_intercept_frappe_enqueue", False):
+            return
+        install_inprocess_patch()
+    except Exception:
+        # Bootstrap must never break import. Once the M8 doctor health-gate
+        # lands, mis-configurations surface there.
+        pass

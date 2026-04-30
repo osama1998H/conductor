@@ -180,3 +180,44 @@ def test_site_has_conductor_returns_false_when_app_not_installed():
 
     with patch.object(frappe_compat, "_frappe_module", fake_frappe):
         assert frappe_compat._site_has_conductor() is False
+
+
+def test_bootstrap_skips_when_flag_unset():
+    """maybe_install_inprocess_patch with no flag in frappe.conf does not patch frappe.enqueue."""
+    fake_frappe = MagicMock()
+    fake_frappe.conf = {}
+    original = MagicMock()
+    fake_frappe.enqueue = original
+
+    with patch.object(frappe_compat, "_frappe_module", fake_frappe):
+        frappe_compat.maybe_install_inprocess_patch()
+
+    assert fake_frappe.enqueue is original
+
+
+def test_bootstrap_installs_when_flag_set():
+    """maybe_install_inprocess_patch with the flag set installs the patch."""
+    fake_frappe = MagicMock()
+    fake_frappe.conf = {"conductor_intercept_frappe_enqueue": True}
+    original = MagicMock()
+    fake_frappe.enqueue = original
+
+    with patch.object(frappe_compat, "_frappe_module", fake_frappe):
+        frappe_compat.maybe_install_inprocess_patch()
+        assert getattr(fake_frappe.enqueue, frappe_compat._PATCH_MARKER, False)
+        # Clean up so other tests are unaffected — uninstall against the same seam.
+        frappe_compat.uninstall_inprocess_patch()
+
+
+def test_bootstrap_swallows_exceptions_silently():
+    """If the conf check itself raises, the bootstrap does not propagate."""
+    fake_frappe = MagicMock()
+    type(fake_frappe).conf = property(lambda self: (_ for _ in ()).throw(RuntimeError("kaboom")))
+    original = MagicMock()
+    fake_frappe.enqueue = original
+
+    with patch.object(frappe_compat, "_frappe_module", fake_frappe):
+        # Must not raise.
+        frappe_compat.maybe_install_inprocess_patch()
+
+    assert fake_frappe.enqueue is original
