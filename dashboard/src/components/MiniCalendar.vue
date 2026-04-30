@@ -1,16 +1,16 @@
 <template>
   <div class="grid grid-cols-7 gap-0.5 max-w-80">
-    <div v-for="(d, i) in DOW" :key="i" class="text-center text-[10px] text-slate-400 p-1">{{ d }}</div>
+    <div v-for="(d, i) in DOW" :key="i" class="text-center text-[10px] text-muted-foreground p-1">{{ d }}</div>
     <div
       v-for="cell in cells"
       :key="cell.iso"
       :class="[
-        'aspect-square p-1 rounded-sm relative bg-slate-50',
-        cell.fires > 0 && 'bg-blue-100',
+        'aspect-square p-1 rounded-sm relative bg-muted',
+        cell.fires > 0 && 'bg-primary/15',
         cell.iso === todayISO && 'outline outline-1 outline-primary',
       ]"
     >
-      <span class="text-2xs text-slate-600">{{ cell.day }}</span>
+      <span class="text-2xs text-foreground">{{ cell.day }}</span>
       <span
         v-if="cell.fires > 0"
         class="absolute bottom-1 right-1 w-1.5 h-1.5 bg-primary rounded-full"

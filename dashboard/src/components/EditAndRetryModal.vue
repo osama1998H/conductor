@@ -1,47 +1,42 @@
 <template>
-  <div
-    class="fixed inset-0 bg-black/40 flex items-center justify-center z-[100]"
-    @click.self="$emit('cancel')"
-  >
-    <div class="bg-white rounded-md p-5 min-w-[480px] max-w-[720px] max-h-[80vh] overflow-auto">
-      <h3 class="mt-0">Edit &amp; retry — {{ entryName }}</h3>
-      <p class="text-xs text-slate-500 mb-4">JSON-validated on save. Edited payload must remain JSON-native.</p>
+  <Dialog :open="true" @update:open="(o) => !o && $emit('cancel')">
+    <DialogContent class="sm:max-w-[640px] max-h-[80vh] overflow-auto">
+      <DialogHeader>
+        <DialogTitle>Edit &amp; retry — {{ entryName }}</DialogTitle>
+        <DialogDescription class="text-xs">
+          JSON-validated on save. Edited payload must remain JSON-native.
+        </DialogDescription>
+      </DialogHeader>
 
-      <label class="block text-xs font-medium mt-2 mb-1">args (JSON array)</label>
-      <textarea
-        v-model="argsText"
-        rows="5"
-        class="w-full font-mono text-xs p-2 border border-slate-300 rounded"
-      ></textarea>
-      <label class="block text-xs font-medium mt-2 mb-1">kwargs (JSON object)</label>
-      <textarea
-        v-model="kwargsText"
-        rows="10"
-        class="w-full font-mono text-xs p-2 border border-slate-300 rounded"
-      ></textarea>
-
-      <div v-if="error" class="text-red-800 my-2">{{ error }}</div>
-
-      <div class="flex justify-end gap-2 mt-4">
-        <button
-          class="px-3.5 py-1.5 border border-slate-300 bg-white rounded cursor-pointer
-                 disabled:opacity-60 disabled:cursor-not-allowed"
-          @click="$emit('cancel')"
-        >Cancel</button>
-        <button
-          class="px-3.5 py-1.5 bg-primary text-white border border-primary rounded cursor-pointer
-                 disabled:opacity-60 disabled:cursor-not-allowed"
-          @click="onSave"
-          :disabled="saving"
-        >{{ saving ? "Saving…" : "Save & retry" }}</button>
+      <div class="space-y-3">
+        <div>
+          <Label>args (JSON array)</Label>
+          <Textarea v-model="argsText" rows="5" class="font-mono text-xs" />
+        </div>
+        <div>
+          <Label>kwargs (JSON object)</Label>
+          <Textarea v-model="kwargsText" rows="10" class="font-mono text-xs" />
+        </div>
+        <p v-if="error" class="text-destructive text-sm">{{ error }}</p>
       </div>
-    </div>
-  </div>
+
+      <DialogFooter>
+        <Button variant="outline" :disabled="saving" @click="$emit('cancel')">Cancel</Button>
+        <Button :disabled="saving" @click="onSave">{{ saving ? "Saving…" : "Save & retry" }}</Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
 </template>
 
 <script setup>
 import { ref } from "vue";
-import { api } from "../api";
+import { api } from "@/api";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 
 const props = defineProps({
   entryName: { type: String, required: true },
@@ -63,7 +58,11 @@ async function onSave() {
 
   saving.value = true;
   try {
-    const newId = await api.dlqEditAndRetry(props.entryName, JSON.stringify(parsedArgs), JSON.stringify(parsedKwargs));
+    const newId = await api.dlqEditAndRetry(
+      props.entryName,
+      JSON.stringify(parsedArgs),
+      JSON.stringify(parsedKwargs),
+    );
     emit("saved", newId);
   } catch (e) {
     error.value = e.message || "Save failed";

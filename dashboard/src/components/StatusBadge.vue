@@ -1,38 +1,35 @@
 <template>
-  <span :class="['text-2xs px-2 py-0.5 rounded-full font-medium', toneClasses]">{{ status }}</span>
+  <Badge :class="toneClasses">{{ status }}</Badge>
 </template>
 
 <script setup>
 import { computed } from "vue";
+import { Badge } from "@/components/ui/badge";
 
 const props = defineProps({ status: String });
 
-const tone = computed(() => {
-  switch (props.status) {
-    case "SUCCEEDED": return "green";
-    case "RUNNING":
-    case "ALIVE": return "blue";
-    case "QUEUED":
-    case "SCHEDULED_RETRY": return "yellow";
-    case "FAILED":
-    case "DLQ":
-    case "TIMED_OUT":
-    case "DISPATCH_FAILED":
-    case "STALE": return "red";
-    case "CANCELLED":
-    case "GONE": return "grey";
-    default: return "grey";
-  }
-});
+const TONE_BY_STATUS = {
+  SUCCEEDED: "green",
+  RUNNING: "blue",
+  ALIVE: "blue",
+  QUEUED: "yellow",
+  SCHEDULED_RETRY: "yellow",
+  FAILED: "red",
+  DLQ: "red",
+  TIMED_OUT: "red",
+  DISPATCH_FAILED: "red",
+  STALE: "red",
+  CANCELLED: "grey",
+  GONE: "grey",
+};
 
-const toneClasses = computed(() => {
-  switch (tone.value) {
-    case "green":  return "bg-green-100 text-green-800";
-    case "blue":   return "bg-blue-100 text-blue-900";
-    case "yellow": return "bg-amber-100 text-amber-800";
-    case "red":    return "bg-red-100 text-red-800";
-    case "grey":
-    default:       return "bg-slate-100 text-slate-600";
-  }
-});
+const TONE_TO_CLASSES = {
+  green:  "bg-green-100 text-green-900 dark:bg-green-950 dark:text-green-300 border-transparent",
+  blue:   "bg-blue-100 text-blue-900 dark:bg-blue-950 dark:text-blue-300 border-transparent",
+  yellow: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300 border-transparent",
+  red:    "bg-red-100 text-red-900 dark:bg-red-950 dark:text-red-300 border-transparent",
+  grey:   "bg-muted text-muted-foreground border-transparent",
+};
+
+const toneClasses = computed(() => TONE_TO_CLASSES[TONE_BY_STATUS[props.status] || "grey"]);
 </script>
