@@ -111,3 +111,62 @@ def test_patched_call_signals_dispatch_failure_loudly():
         frappe_compat.install_inprocess_patch()
         with pytest.raises(RuntimeError, match="redis down"):
             fake_frappe.enqueue("foo.bar")
+
+
+def test_patched_call_forwards_timeout_and_arbitrary_kwargs_on_divert():
+    """The patched function passes timeout and arbitrary kwargs through to conductor."""
+    fake_frappe = MagicMock()
+    fake_frappe.local.site = "alpha"
+    fake_frappe.enqueue = MagicMock(return_value="rq-job-id")
+
+    with patch.object(frappe_compat, "_frappe_module", fake_frappe), \
+         patch.object(frappe_compat, "_site_has_conductor", return_value=True), \
+         patch.object(frappe_compat, "_conductor_enqueue", return_value="cnd-1") as cnd:
+        frappe_compat.install_inprocess_patch()
+        fake_frappe.enqueue("foo.bar", queue="q", timeout=600, job_name="x", arg1=1)
+
+    cnd.assert_called_once_with("foo.bar", queue="q", timeout=600, job_name="x", arg1=1)
+
+
+def test_patched_call_forwards_timeout_and_arbitrary_kwargs_on_fallback():
+    """The patched function passes timeout and arbitrary kwargs through to the original on fallback."""
+    fake_frappe = MagicMock()
+    fake_frappe.local.site = "beta"
+    original = MagicMock(return_value="rq-job-id")
+    fake_frappe.enqueue = original
+
+    with patch.object(frappe_compat, "_frappe_module", fake_frappe), \
+         patch.object(frappe_compat, "_site_has_conductor", return_value=False):
+        frappe_compat.install_inprocess_patch()
+        fake_frappe.enqueue("foo.bar", queue="q", timeout=600, job_name="x", arg1=1)
+
+    original.assert_called_once_with("foo.bar", queue="q", timeout=600, job_name="x", arg1=1)
+
+
+def test_site_has_conductor_returns_false_when_no_current_site():
+    """_site_has_conductor returns False when frappe has no site bound."""
+    fake_frappe = MagicMock()
+    fake_frappe.local.site = None
+
+    with patch.object(frappe_compat, "_frappe_module", fake_frappe):
+        assert frappe_compat._site_has_conductor() is False
+
+
+def test_site_has_conductor_returns_false_when_get_installed_apps_raises():
+    """_site_has_conductor swallows exceptions and returns False so the patch can fall back safely."""
+    fake_frappe = MagicMock()
+    fake_frappe.local.site = "alpha"
+    fake_frappe.get_installed_apps = MagicMock(side_effect=RuntimeError("db not connected"))
+
+    with patch.object(frappe_compat, "_frappe_module", fake_frappe):
+        assert frappe_compat._site_has_conductor() is False
+
+
+def test_site_has_conductor_returns_true_when_app_installed():
+    """_site_has_conductor returns True when the current site has conductor in get_installed_apps()."""
+    fake_frappe = MagicMock()
+    fake_frappe.local.site = "alpha"
+    fake_frappe.get_installed_apps = MagicMock(return_value=["frappe", "conductor", "erpnext"])
+
+    with patch.object(frappe_compat, "_frappe_module", fake_frappe):
+        assert frappe_compat._site_has_conductor() is True
