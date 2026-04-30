@@ -1,16 +1,17 @@
 <template>
-  <div
-    class="bg-white border border-slate-200 rounded-md px-5 py-4 cursor-pointer
-           min-h-20 flex flex-col justify-between
-           transition-colors duration-150 hover:border-primary"
-    @click="$emit('click')"
-  >
-    <div class="text-3xl font-semibold text-slate-800">{{ value }}</div>
-    <div class="text-xs text-slate-500 uppercase tracking-wider">{{ label }}</div>
-  </div>
+  <Card class="cursor-pointer transition-colors hover:border-primary" @click="$emit('click')">
+    <CardHeader class="pb-2">
+      <CardDescription class="text-xs uppercase tracking-wider">{{ label }}</CardDescription>
+    </CardHeader>
+    <CardContent>
+      <div class="text-3xl font-semibold">{{ value }}</div>
+    </CardContent>
+  </Card>
 </template>
 
 <script setup>
+import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
+
 defineProps({
   value: { type: [Number, String], default: 0 },
   label: { type: String, required: true },
