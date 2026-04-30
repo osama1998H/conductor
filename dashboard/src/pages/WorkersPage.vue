@@ -2,116 +2,130 @@
   <div class="flex gap-4 h-[calc(100vh-100px)]">
     <div class="flex-1 min-w-0 flex flex-col">
       <div class="mb-3">
-        <button
-          @click="reload"
-          class="px-3 py-1 text-sm bg-white text-slate-800 border border-slate-300 rounded
-                 hover:border-primary hover:bg-slate-50 active:bg-blue-50
-                 disabled:opacity-50 disabled:cursor-not-allowed
-                 transition-colors duration-150 cursor-pointer"
-        >Refresh</button>
+        <Button variant="outline" @click="reload">Refresh</Button>
       </div>
-      <table class="w-full border-collapse text-xs">
-        <thead>
-          <tr>
-            <th class="text-left px-2 py-1.5 border-b border-slate-200">Status</th>
-            <th class="text-left px-2 py-1.5 border-b border-slate-200">Worker</th>
-            <th class="text-left px-2 py-1.5 border-b border-slate-200">Host</th>
-            <th class="text-left px-2 py-1.5 border-b border-slate-200">PID</th>
-            <th class="text-left px-2 py-1.5 border-b border-slate-200">Queues</th>
-            <th class="text-left px-2 py-1.5 border-b border-slate-200">HB age</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="row in sortedRows"
-            :key="row.name"
-            :class="[
-              'cursor-pointer',
-              row.name === worker_id ? 'bg-indigo-100' : 'hover:bg-slate-50',
-            ]"
-            @click="open(row.name)"
-          >
-            <td class="px-2 py-1.5 border-b border-slate-200">
-              <StatusBadge :status="row.status" />
-            </td>
-            <td class="px-2 py-1.5 border-b border-slate-200 font-mono">{{ row.name }}</td>
-            <td class="px-2 py-1.5 border-b border-slate-200">{{ row.host }}</td>
-            <td class="px-2 py-1.5 border-b border-slate-200">{{ row.pid }}</td>
-            <td class="px-2 py-1.5 border-b border-slate-200">{{ parseQueues(row.queues) }}</td>
-            <td class="px-2 py-1.5 border-b border-slate-200 text-2xs text-slate-500">{{ heartbeatAge(row.last_heartbeat) }}</td>
-          </tr>
-        </tbody>
-      </table>
-      <div v-if="!rows.length" class="text-slate-400 p-3 text-center">No workers registered.</div>
+      <Card class="p-0 flex-1 overflow-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Status</TableHead>
+              <TableHead>Worker</TableHead>
+              <TableHead>Host</TableHead>
+              <TableHead>PID</TableHead>
+              <TableHead>Queues</TableHead>
+              <TableHead>HB age</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow
+              v-for="row in sortedRows"
+              :key="row.name"
+              :class="['cursor-pointer', row.name === worker_id ? 'bg-muted' : 'hover:bg-muted/50']"
+              @click="open(row.name)"
+            >
+              <TableCell><StatusBadge :status="row.status" /></TableCell>
+              <TableCell class="font-mono text-xs">{{ row.name }}</TableCell>
+              <TableCell>{{ row.host }}</TableCell>
+              <TableCell>{{ row.pid }}</TableCell>
+              <TableCell class="font-mono text-xs">{{ parseQueues(row.queues) }}</TableCell>
+              <TableCell>
+                <Tooltip>
+                  <TooltipTrigger as-child>
+                    <span class="text-xs text-muted-foreground">{{ heartbeatAge(row.last_heartbeat) }}</span>
+                  </TooltipTrigger>
+                  <TooltipContent>{{ row.last_heartbeat || "—" }}</TooltipContent>
+                </Tooltip>
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+        <div v-if="!rows.length" class="p-6 text-center text-muted-foreground text-sm">No workers registered.</div>
+      </Card>
     </div>
 
-    <div class="flex-1 min-w-0 border-l border-slate-300 pl-4 overflow-auto" v-if="worker_id">
-      <div v-if="!detail" class="text-slate-400 p-3 text-center">Loading…</div>
-      <div v-else>
-        <header class="flex gap-2 items-center mb-4 flex-wrap">
+    <div v-if="worker_id" class="flex-1 min-w-0 overflow-auto">
+      <Card v-if="!detail">
+        <CardContent class="p-6 text-center text-muted-foreground">Loading…</CardContent>
+      </Card>
+      <Card v-else>
+        <CardHeader class="flex flex-row items-center gap-2 flex-wrap">
           <StatusBadge :status="detail.status" />
-          <code class="font-mono">{{ detail.name }}</code>
-          <span>· {{ detail.host }}:{{ detail.pid }}</span>
-          <span v-if="detail.conductor_version">· v{{ detail.conductor_version }}</span>
-        </header>
+          <code class="font-mono text-sm">{{ detail.name }}</code>
+          <span class="text-xs text-muted-foreground">· {{ detail.host }}:{{ detail.pid }}</span>
+          <span v-if="detail.conductor_version" class="text-xs text-muted-foreground">· v{{ detail.conductor_version }}</span>
+        </CardHeader>
+        <CardContent class="space-y-4">
+          <section>
+            <h4 class="text-sm font-medium mb-2">Queues</h4>
+            <p class="font-mono text-sm">{{ parseQueues(detail.queues) }}</p>
+          </section>
 
-        <section class="mt-4">
-          <h4 class="mb-2">Queues</h4>
-          <p class="font-mono">{{ parseQueues(detail.queues) }}</p>
-        </section>
+          <section>
+            <h4 class="text-sm font-medium mb-2">Heartbeat</h4>
+            <p class="text-sm">
+              Last beat at <span class="text-2xs text-muted-foreground">{{ detail.last_heartbeat }}</span>
+              ({{ detail.heartbeat_age_seconds }}s ago)
+            </p>
+            <p class="text-sm">
+              Started at <span class="text-2xs text-muted-foreground">{{ detail.started_at }}</span>
+            </p>
+          </section>
 
-        <section class="mt-4">
-          <h4 class="mb-2">Heartbeat</h4>
-          <p>Last beat at <span class="text-2xs text-slate-500">{{ detail.last_heartbeat }}</span> ({{ detail.heartbeat_age_seconds }}s ago)</p>
-          <p>Started at <span class="text-2xs text-slate-500">{{ detail.started_at }}</span></p>
-        </section>
+          <section v-if="detail.current_job">
+            <h4 class="text-sm font-medium mb-2">Currently executing</h4>
+            <p class="text-sm">
+              <RouterLink :to="`/jobs/${detail.current_job}`" class="font-mono text-primary hover:underline">
+                {{ detail.current_job }}
+              </RouterLink>
+              <StatusBadge v-if="currentJobStatus" :status="currentJobStatus" class="ml-2" />
+            </p>
+          </section>
 
-        <section v-if="detail.current_job" class="mt-4">
-          <h4 class="mb-2">Currently executing</h4>
-          <router-link :to="`/jobs/${detail.current_job}`" class="font-mono">{{ detail.current_job }}</router-link>
-          <span v-if="currentJobStatus"> ·
-            <StatusBadge :status="currentJobStatus" />
-          </span>
-        </section>
-
-        <section class="mt-4">
-          <h4 class="mb-2">Recent jobs handled</h4>
-          <table v-if="detail.recent_jobs?.length" class="w-full border-collapse text-xs">
-            <thead>
-              <tr>
-                <th class="text-left px-2 py-1 border-b border-slate-200">Job ID</th>
-                <th class="text-left px-2 py-1 border-b border-slate-200">Method</th>
-                <th class="text-left px-2 py-1 border-b border-slate-200">Queue</th>
-                <th class="text-left px-2 py-1 border-b border-slate-200">Status</th>
-                <th class="text-left px-2 py-1 border-b border-slate-200">Finished</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="r in detail.recent_jobs" :key="r.job_id">
-                <td class="px-2 py-1 border-b border-slate-200">
-                  <router-link :to="`/jobs/${r.job_id}`" class="font-mono">{{ r.job_id.slice(0, 8) }}…</router-link>
-                </td>
-                <td class="px-2 py-1 border-b border-slate-200 font-mono">{{ r.method }}</td>
-                <td class="px-2 py-1 border-b border-slate-200">{{ r.queue }}</td>
-                <td class="px-2 py-1 border-b border-slate-200">
-                  <StatusBadge :status="r.status" />
-                </td>
-                <td class="px-2 py-1 border-b border-slate-200 text-2xs text-slate-500">{{ r.finished_at }}</td>
-              </tr>
-            </tbody>
-          </table>
-          <div v-else class="text-slate-400 p-3 text-center">No recent jobs.</div>
-        </section>
-      </div>
+          <section>
+            <h4 class="text-sm font-medium mb-2">Recent jobs handled</h4>
+            <Table v-if="detail.recent_jobs?.length">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Job ID</TableHead>
+                  <TableHead>Method</TableHead>
+                  <TableHead>Queue</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Finished</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow v-for="r in detail.recent_jobs" :key="r.job_id">
+                  <TableCell>
+                    <RouterLink :to="`/jobs/${r.job_id}`" class="font-mono text-primary hover:underline">
+                      {{ r.job_id.slice(0, 8) }}…
+                    </RouterLink>
+                  </TableCell>
+                  <TableCell class="font-mono text-xs">{{ r.method }}</TableCell>
+                  <TableCell>{{ r.queue }}</TableCell>
+                  <TableCell><StatusBadge :status="r.status" /></TableCell>
+                  <TableCell class="text-2xs text-muted-foreground">{{ r.finished_at }}</TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+            <div v-else class="text-muted-foreground text-sm">No recent jobs.</div>
+          </section>
+        </CardContent>
+      </Card>
     </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, watch, toRefs } from "vue";
-import { useRouter } from "vue-router";
-import { api, getList } from "../api";
-import StatusBadge from "../components/StatusBadge.vue";
+import { useRouter, RouterLink } from "vue-router";
+import { api, getList } from "@/api";
+import StatusBadge from "@/components/StatusBadge.vue";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 const props = defineProps({ worker_id: String });
 const router = useRouter();
@@ -144,7 +158,6 @@ const sortedRows = computed(() => {
     const aRank = STATUS_RANK[a.status] ?? 99;
     const bRank = STATUS_RANK[b.status] ?? 99;
     if (aRank !== bRank) return aRank - bRank;
-    // newer heartbeat first within the same status
     return new Date(b.last_heartbeat || 0) - new Date(a.last_heartbeat || 0);
   });
 });
