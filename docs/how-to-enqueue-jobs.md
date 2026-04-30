@@ -81,7 +81,7 @@ Conductor ships a shim with `frappe.enqueue`'s exact call signature so existing 
 
 3. Hit a `frappe.enqueue` HTTP endpoint and confirm the job lands on a Conductor queue, not RQ.
 
-**Caveat — read carefully.** `override_whitelisted_methods` rewrites HTTP `/api/method/frappe.enqueue` calls only. Intra-process Python calls (`frappe.enqueue(...)` from inside a controller, hook, or other background task) **bypass** the override and still go to Frappe RQ. To route every enqueue path, change those call sites to `conductor.enqueue(...)` directly, or migrate them in a follow-up pass after the HTTP override has shaken out.
+**Caveat — read carefully.** `override_whitelisted_methods` rewrites HTTP `/api/method/frappe.enqueue` calls only. Intra-process Python calls (`frappe.enqueue(...)` from inside a controller, hook, or another in-process callsite) **bypass** the override and still go to Frappe RQ. To route every enqueue path, change those call sites to `conductor.enqueue(...)` directly, or migrate them in a follow-up pass after the HTTP override has shaken out.
 
 ---
 

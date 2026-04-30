@@ -282,7 +282,7 @@ override_whitelisted_methods = {
 }
 ```
 
-**Caveat — read carefully.** The override only intercepts HTTP calls to `/api/method/frappe.enqueue`. Intra-process Python calls (`frappe.enqueue(...)` from inside another job, hook, or background task) **bypass the override** and go to Frappe RQ. To route every enqueue path to Conductor, either call `conductor.enqueue(...)` directly in your code, or migrate intra-process call sites one by one.
+**Caveat — read carefully.** The override only intercepts HTTP calls to `/api/method/frappe.enqueue`. Intra-process Python calls (`frappe.enqueue(...)` from inside another job, hook, or in-process callsite) **bypass the override** and go to Frappe RQ. To route every enqueue path to Conductor, either call `conductor.enqueue(...)` directly in your code, or migrate intra-process call sites one by one.
 
 ---
 
