@@ -1,5 +1,5 @@
 <template>
-  <pre class="font-mono text-xs bg-slate-50 p-3 rounded max-h-96 overflow-auto whitespace-pre-wrap break-words">{{ formatted }}</pre>
+  <pre class="font-mono text-xs bg-muted text-foreground p-3 rounded max-h-96 overflow-auto whitespace-pre-wrap break-words">{{ formatted }}</pre>
 </template>
 
 <script setup>
