@@ -13,9 +13,9 @@
         <SidebarGroupLabel>Operations</SidebarGroupLabel>
         <SidebarGroupContent>
           <SidebarMenu>
-            <SidebarMenuItem v-for="link in navLinks" :key="link.to">
-              <SidebarMenuButton as-child :is-active="isActive(link.to)" :tooltip="link.label">
-                <RouterLink :to="link.to">
+            <SidebarMenuItem v-for="link in NAV_LINKS" :key="link.path">
+              <SidebarMenuButton as-child :is-active="matchPrefix(route.path, link.path)" :tooltip="link.label">
+                <RouterLink :to="link.path">
                   <component :is="link.icon" />
                   <span>{{ link.label }}</span>
                 </RouterLink>
@@ -31,10 +31,6 @@
 <script setup>
 import { useRoute, RouterLink } from "vue-router";
 import {
-  LayoutDashboard, Activity, ListChecks, AlertTriangle,
-  CalendarClock, Users, GitBranch,
-} from "lucide-vue-next";
-import {
   Sidebar,
   SidebarContent,
   SidebarGroup,
@@ -45,20 +41,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import { NAV_LINKS, matchPrefix } from "@/lib/nav";
 
 const route = useRoute();
-
-const navLinks = [
-  { to: "/overview",  label: "Overview",   icon: LayoutDashboard },
-  { to: "/feed",      label: "Live Feed",  icon: Activity },
-  { to: "/jobs",      label: "Jobs",       icon: ListChecks },
-  { to: "/dlq",       label: "DLQ",        icon: AlertTriangle },
-  { to: "/schedules", label: "Schedules",  icon: CalendarClock },
-  { to: "/workers",   label: "Workers",    icon: Users },
-  { to: "/workflows", label: "Workflows",  icon: GitBranch },
-];
-
-function isActive(prefix) {
-  return route.path === prefix || route.path.startsWith(prefix + "/");
-}
 </script>

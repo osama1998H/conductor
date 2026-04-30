@@ -27,21 +27,9 @@ import {
   BreadcrumbPage,
 } from "@/components/ui/breadcrumb";
 import ModeToggle from "@/components/ModeToggle.vue";
+import { findNavTitle } from "@/lib/nav";
 
 const route = useRoute();
 
-const TITLES = {
-  "/overview": "Overview",
-  "/feed": "Live Feed",
-  "/jobs": "Jobs",
-  "/dlq": "DLQ",
-  "/schedules": "Schedules",
-  "/workers": "Workers",
-  "/workflows": "Workflows",
-};
-
-const pageTitle = computed(() => {
-  const match = Object.keys(TITLES).find(p => route.path === p || route.path.startsWith(p + "/"));
-  return match ? TITLES[match] : "Conductor";
-});
+const pageTitle = computed(() => findNavTitle(route.path));
 </script>
