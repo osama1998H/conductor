@@ -7,13 +7,21 @@ There are two layers here:
    in their `hooks.py`. The override rewrites HTTP `/api/method/frappe.enqueue`
    calls so they land here.
 
-2. **In-process patch** (v2).  When the bench-wide flag
+2. **In-process patch** (v2).  `install_inprocess_patch()` runs on conductor
+   import and replaces `frappe.enqueue` at the Python level unconditionally.
+   The patched function checks the bench-wide flag
        conductor_intercept_frappe_enqueue: true
-   is set in `sites/common_site_config.json`, `install_inprocess_patch()` runs
-   on conductor import and replaces `frappe.enqueue` at the Python level. The
-   patched function diverts to `conductor.enqueue` only when the current site
-   has conductor installed; otherwise it falls back to the original
-   `frappe.enqueue`.
+   from `frappe.conf` (built by Frappe from common_site_config.json + the
+   active site's site_config.json) AT CALL TIME — not at install time. This
+   is essential because conductor is typically imported during Frappe's app
+   discovery, before `frappe.init()` populates `frappe.conf`. Reading the
+   flag at install time would silently see an empty conf and never enable
+   the patch.
+
+   When the flag is unset, the patched function transparently calls the
+   original `frappe.enqueue` — zero behavior change for users who haven't
+   enabled v2 routing. When the flag is set AND the current site has
+   conductor installed, the call diverts to `conductor.enqueue`.
 """
 
 from __future__ import annotations
@@ -40,6 +48,15 @@ def enqueue(method: str, queue: str = "default", timeout: int | None = None, **k
     return conductor.enqueue(method, queue=queue, timeout=timeout, **kwargs)
 
 
+def _intercept_enabled() -> bool:
+    """True when the bench-wide flag is set right now."""
+    try:
+        conf = getattr(_frappe_module, "conf", None) or {}
+        return bool(conf.get("conductor_intercept_frappe_enqueue", False))
+    except Exception:
+        return False
+
+
 def _site_has_conductor() -> bool:
     """True when the currently-initialized Frappe site has conductor installed."""
     try:
@@ -61,6 +78,8 @@ def _make_patched_enqueue(original: Callable[..., Any]) -> Callable[..., Any]:
         if timeout is not None:
             call_kwargs["timeout"] = timeout
 
+        if not _intercept_enabled():
+            return original(method, **call_kwargs)
         if not _site_has_conductor():
             return original(method, **call_kwargs)
         try:
@@ -100,19 +119,24 @@ def uninstall_inprocess_patch() -> None:
 
 
 def maybe_install_inprocess_patch() -> None:
-    """Install the in-process patch when the bench flag is set; otherwise no-op.
+    """Install the in-process patch unconditionally on conductor import.
 
-    Reads the flag from `frappe.conf` (which Frappe builds by merging
-    common_site_config.json + the active site's site_config.json) so the
-    activation can be set bench-wide. Failures here MUST NOT break import:
-    the v1 HTTP shim still works without this bootstrap. Failures emit a
-    best-effort warning via frappe.logger so operators have a breadcrumb
-    when the patch should be active but isn't.
+    Always-install + per-call flag check is the timing-robust pattern: if we
+    only installed when the flag was set at import time, conductor's import
+    during Frappe app discovery (which typically precedes `frappe.init()`)
+    would see an empty `frappe.conf` and silently skip — leaving the patch
+    permanently inactive even after the flag is set.
+
+    By installing unconditionally and checking the flag inside the patched
+    function, every later call sees the current `frappe.conf` and routes
+    correctly. Calls when the flag is unset transparently fall through to
+    the original `frappe.enqueue`.
+
+    Failures here MUST NOT break import: the v1 HTTP shim still works
+    without this bootstrap. Failures emit a best-effort warning via
+    frappe.logger so operators have a breadcrumb.
     """
     try:
-        conf = getattr(_frappe_module, "conf", None) or {}
-        if not conf.get("conductor_intercept_frappe_enqueue", False):
-            return
         install_inprocess_patch()
     except Exception as exc:
         try:
