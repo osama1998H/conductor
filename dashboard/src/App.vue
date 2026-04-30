@@ -1,33 +1,22 @@
 <template>
-  <div class="font-sans">
-    <nav class="flex gap-1 border-b border-slate-200 px-4">
-      <router-link
-        v-for="link in navLinks"
-        :key="link.to"
-        :to="link.to"
-        class="px-3 py-2 text-slate-600 border-b-2 border-transparent
-               [&.router-link-active]:text-primary
-               [&.router-link-active]:border-primary
-               [&.router-link-active]:font-medium"
-      >{{ link.label }}</router-link>
-    </nav>
-    <main class="p-4"><router-view /></main>
+  <SidebarProvider>
+    <AppSidebar />
+    <SidebarInset>
+      <AppHeader />
+      <main class="flex-1 p-4 overflow-auto">
+        <RouterView />
+      </main>
+    </SidebarInset>
     <ConfirmDialog />
-    <ToastHost />
-  </div>
+    <Toaster />
+  </SidebarProvider>
 </template>
 
 <script setup>
-import ConfirmDialog from "./components/ConfirmDialog.vue";
-import ToastHost from "./components/ToastHost.vue";
-
-const navLinks = [
-  { to: "/overview",  label: "Overview" },
-  { to: "/feed",      label: "Live Feed" },
-  { to: "/jobs",      label: "Jobs" },
-  { to: "/dlq",       label: "DLQ" },
-  { to: "/schedules", label: "Schedules" },
-  { to: "/workers",   label: "Workers" },
-  { to: "/workflows", label: "Workflows" },
-];
+import { RouterView } from "vue-router";
+import AppSidebar from "@/components/AppSidebar.vue";
+import AppHeader from "@/components/AppHeader.vue";
+import ConfirmDialog from "@/components/ConfirmDialog.vue";
+import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
+import { Toaster } from "@/components/ui/sonner";
 </script>
