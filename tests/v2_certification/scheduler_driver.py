@@ -91,9 +91,14 @@ def trigger_one(sjt: dict[str, Any]) -> dict[str, Any]:
         "notes": "",
     }
     try:
-        sjt_doc = frappe.get_doc("Scheduled Job Type", sjt["name"])
-        # `enqueue` on the doc dispatches via frappe.enqueue, which is now patched.
-        sjt_doc.enqueue(force=True)
+        # Path B: dispatch via the same code path the takeover loop uses.
+        # We do NOT use sjt.enqueue(force=True) — that calls Frappe's `enqueue`
+        # imported directly from frappe.utils.background_jobs, which goes to RQ
+        # not Conductor regardless of the in-process patch. The takeover loop's
+        # _fire_one dispatches via conductor.dispatcher.enqueue and updates
+        # `last_execution`, exactly what we want for force-trigger.
+        from conductor.frappe_scheduled_loop import _fire_one
+        _fire_one(sjt["name"], frappe)
         frappe.db.commit()
     except Exception as exc:
         result["error"] = f"trigger raised: {exc!r}"
