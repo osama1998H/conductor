@@ -9,7 +9,7 @@ Login as Administrator before the first scenario; subsequent scenarios reuse the
 
 For every scenario, run it twice — once in light mode, once in dark mode — using the ModeToggle in the header.
 
-## NOTE: each page has some records try clieck on one of the record and test all the action buttons to check if it working 
+## NOTE: each page has some records try clieck on one of the record and test all the action buttons to check if it working and check the pagination and filters of every page to see if it return the valid data for each filter 
 
 ## Overview page
 
