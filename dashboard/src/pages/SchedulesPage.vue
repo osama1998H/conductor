@@ -1,139 +1,149 @@
 <template>
-  <div class="flex gap-4 h-[calc(100vh-100px)]">
-    <div class="flex-1 min-w-0 flex flex-col">
-      <div class="flex gap-2 mb-3">
-        <input
-          v-model="filters.q"
-          placeholder="search name…"
-          class="px-2 py-1 border border-slate-300 rounded text-sm"
-        />
-        <button
-          @click="reload"
-          class="px-3 py-1 text-sm bg-white text-slate-800 border border-slate-300 rounded
-                 hover:border-primary hover:bg-slate-50 active:bg-blue-50
-                 disabled:opacity-50 disabled:cursor-not-allowed
-                 transition-colors duration-150 cursor-pointer"
-        >Refresh</button>
-      </div>
-      <table class="w-full border-collapse text-xs">
-        <thead>
-          <tr>
-            <th class="text-left px-2 py-1.5 border-b border-slate-200">Name</th>
-            <th class="text-left px-2 py-1.5 border-b border-slate-200">Cron</th>
-            <th class="text-left px-2 py-1.5 border-b border-slate-200">TZ</th>
-            <th class="text-left px-2 py-1.5 border-b border-slate-200">Enabled</th>
-            <th class="text-left px-2 py-1.5 border-b border-slate-200">Next run</th>
-            <th class="text-left px-2 py-1.5 border-b border-slate-200">Last status</th>
-            <th class="text-left px-2 py-1.5 border-b border-slate-200">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
+  <div class="space-y-4">
+    <div class="flex gap-2">
+      <Input v-model="filters.q" placeholder="search name…" class="max-w-xs" />
+      <Button variant="outline" @click="reload">Refresh</Button>
+    </div>
+
+    <Card class="p-0">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Name</TableHead>
+            <TableHead>Cron</TableHead>
+            <TableHead>TZ</TableHead>
+            <TableHead>Enabled</TableHead>
+            <TableHead>Next run</TableHead>
+            <TableHead>Last status</TableHead>
+            <TableHead>Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableRow
             v-for="row in rows"
             :key="row.name"
-            :class="row.name === name && 'bg-indigo-100'"
+            :class="['cursor-pointer', row.name === name ? 'bg-muted' : 'hover:bg-muted/50']"
           >
-            <td class="px-2 py-1.5 border-b border-slate-200 cursor-pointer font-mono" @click="open(row.name)">{{ row.name }}</td>
-            <td class="px-2 py-1.5 border-b border-slate-200 cursor-pointer font-mono" @click="open(row.name)">{{ row.cron_expression }}</td>
-            <td class="px-2 py-1.5 border-b border-slate-200 cursor-pointer" @click="open(row.name)">{{ row.timezone }}</td>
-            <td class="px-2 py-1.5 border-b border-slate-200">
-              <input type="checkbox" :checked="!!row.enabled" :disabled="!isSysMgr" @change="onToggleEnabled(row)" />
-            </td>
-            <td class="px-2 py-1.5 border-b border-slate-200 cursor-pointer text-2xs text-slate-500" @click="open(row.name)">{{ row.next_run_at }}</td>
-            <td class="px-2 py-1.5 border-b border-slate-200 cursor-pointer" @click="open(row.name)">
+            <TableCell class="font-mono text-xs" @click="open(row.name)">{{ row.name }}</TableCell>
+            <TableCell class="font-mono text-xs" @click="open(row.name)">{{ row.cron_expression }}</TableCell>
+            <TableCell @click="open(row.name)">{{ row.timezone }}</TableCell>
+            <TableCell>
+              <Switch
+                :checked="!!row.enabled"
+                :disabled="!isSysMgr"
+                @update:checked="onToggleEnabled(row)"
+              />
+            </TableCell>
+            <TableCell class="text-2xs text-muted-foreground" @click="open(row.name)">{{ row.next_run_at }}</TableCell>
+            <TableCell @click="open(row.name)">
               <StatusBadge v-if="row.last_status" :status="row.last_status" />
-            </td>
-            <td class="px-2 py-1.5 border-b border-slate-200">
-              <button
+            </TableCell>
+            <TableCell>
+              <Button
+                size="sm"
                 :disabled="!isOperator"
-                @click="onRunNow(row.name)"
+                @click.stop="onRunNow(row.name)"
                 title="Dispatches now; cron cadence is unaffected."
-                class="px-2 py-0.5 bg-primary text-white border-0 rounded text-2xs cursor-pointer
-                       disabled:bg-slate-300 disabled:cursor-not-allowed"
-              >Run now</button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-      <div v-if="!rows.length" class="text-slate-400 p-3 text-center">No schedules.</div>
-    </div>
+              >Run now</Button>
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+      <div v-if="!rows.length" class="p-6 text-center text-muted-foreground text-sm">No schedules.</div>
+    </Card>
 
-    <div class="flex-1 min-w-0 border-l border-slate-300 pl-4 overflow-auto" v-if="name">
-      <div v-if="!schedule" class="text-slate-400 p-3 text-center">Loading…</div>
-      <div v-else>
-        <header class="flex gap-3 items-center mb-4 flex-wrap">
-          <h3>{{ schedule.name }}</h3>
-          <code class="font-mono">{{ schedule.cron_expression }}</code>
-          <span>· {{ schedule.timezone }}</span>
-          <input type="checkbox" :checked="!!schedule.enabled" :disabled="!isSysMgr"
-            @change="onToggleEnabled(schedule)" />
-        </header>
+    <Sheet :open="!!name" @update:open="onSheetOpenChange">
+      <SheetContent side="right" class="w-[480px] sm:w-[640px] sm:max-w-[640px] overflow-y-auto">
+        <template v-if="schedule">
+          <SheetHeader>
+            <SheetTitle class="font-mono text-base">{{ schedule.name }}</SheetTitle>
+            <SheetDescription>
+              <code class="font-mono">{{ schedule.cron_expression }}</code> · {{ schedule.timezone }}
+            </SheetDescription>
+          </SheetHeader>
 
-        <section class="mt-4">
-          <h4 class="mb-2">Last dispatch</h4>
-          <p v-if="schedule.last_status">
-            <StatusBadge :status="schedule.last_status" /> at <span class="text-2xs text-slate-500">{{ schedule.last_run_at }}</span>
-          </p>
-          <p v-else>(never dispatched)</p>
-        </section>
+          <div class="space-y-4 py-4">
+            <section>
+              <h4 class="text-sm font-medium mb-2">Last dispatch</h4>
+              <p v-if="schedule.last_status" class="text-sm">
+                <StatusBadge :status="schedule.last_status" /> at
+                <span class="text-2xs text-muted-foreground">{{ schedule.last_run_at }}</span>
+              </p>
+              <p v-else class="text-sm text-muted-foreground">(never dispatched)</p>
+            </section>
 
-        <section v-if="schedule.last_job" class="mt-4">
-          <h4 class="mb-2">Last job</h4>
-          <p>
-            <router-link :to="`/jobs/${schedule.last_job}`">{{ schedule.last_job }}</router-link>
-            <StatusBadge v-if="lastJobStatus" :status="lastJobStatus" />
-          </p>
-        </section>
+            <section v-if="schedule.last_job">
+              <h4 class="text-sm font-medium mb-2">Last job</h4>
+              <p class="text-sm">
+                <RouterLink :to="`/jobs/${schedule.last_job}`" class="text-primary hover:underline">
+                  {{ schedule.last_job }}
+                </RouterLink>
+                <StatusBadge v-if="lastJobStatus" :status="lastJobStatus" class="ml-2" />
+              </p>
+            </section>
 
-        <section class="mt-4">
-          <h4 class="mb-2">Next 10 fires</h4>
-          <ul class="list-none p-0 m-0 text-xs">
-            <li v-for="f in nextFires" :key="f" class="py-0.5 text-2xs text-slate-500">{{ f }}</li>
-          </ul>
-        </section>
+            <section>
+              <h4 class="text-sm font-medium mb-2">Next 10 fires</h4>
+              <ul class="text-2xs text-muted-foreground space-y-0.5">
+                <li v-for="f in nextFires" :key="f">{{ f }}</li>
+              </ul>
+            </section>
 
-        <section class="mt-4">
-          <h4 class="mb-2">Calendar</h4>
-          <MiniCalendar :fires="nextFires" />
-        </section>
+            <section>
+              <h4 class="text-sm font-medium mb-2">Calendar</h4>
+              <MiniCalendar :fires="nextFires" />
+            </section>
 
-        <section class="mt-4">
-          <h4 class="mb-2">Recent runs (heuristic by method)</h4>
-          <table class="w-full border-collapse text-xs">
-            <thead>
-              <tr>
-                <th class="text-left px-2 py-1 border-b border-slate-200">Job ID</th>
-                <th class="text-left px-2 py-1 border-b border-slate-200">Status</th>
-                <th class="text-left px-2 py-1 border-b border-slate-200">Enqueued</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="r in recentRuns" :key="r.job_id">
-                <td class="px-2 py-1 border-b border-slate-200">
-                  <router-link :to="`/jobs/${r.job_id}`" class="font-mono">{{ r.job_id.slice(0, 8) }}…</router-link>
-                </td>
-                <td class="px-2 py-1 border-b border-slate-200">
-                  <StatusBadge :status="r.status" />
-                </td>
-                <td class="px-2 py-1 border-b border-slate-200 text-2xs text-slate-500">{{ r.enqueued_at }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </section>
-      </div>
-    </div>
+            <section>
+              <h4 class="text-sm font-medium mb-2">Recent runs</h4>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Job ID</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Enqueued</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <TableRow v-for="r in recentRuns" :key="r.job_id">
+                    <TableCell>
+                      <RouterLink :to="`/jobs/${r.job_id}`" class="font-mono text-primary hover:underline">
+                        {{ r.job_id.slice(0, 8) }}…
+                      </RouterLink>
+                    </TableCell>
+                    <TableCell><StatusBadge :status="r.status" /></TableCell>
+                    <TableCell class="text-2xs text-muted-foreground">{{ r.enqueued_at }}</TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </section>
+          </div>
+        </template>
+        <div v-else class="p-6 text-center text-muted-foreground text-sm">Loading…</div>
+      </SheetContent>
+    </Sheet>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, watch, toRefs } from "vue";
-import { useRouter } from "vue-router";
-import { api, getList } from "../api";
-import { useUserRoles } from "../stores/useUserRoles";
-import { confirm } from "../stores/useConfirm";
-import { toast } from "../stores/useToast";
-import StatusBadge from "../components/StatusBadge.vue";
-import MiniCalendar from "../components/MiniCalendar.vue";
+import { useRouter, RouterLink } from "vue-router";
+import { api, getList } from "@/api";
+import { useUserRoles } from "@/stores/useUserRoles";
+import { confirm } from "@/stores/useConfirm";
+import { toast } from "@/stores/useToast";
+import StatusBadge from "@/components/StatusBadge.vue";
+import MiniCalendar from "@/components/MiniCalendar.vue";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table";
+import {
+  Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle,
+} from "@/components/ui/sheet";
 
 const props = defineProps({ name: String });
 const router = useRouter();
@@ -218,5 +228,9 @@ async function onToggleEnabled(row) {
   await api.scheduleSetEnabled(row.name, next);
   reload();
   if (name.value === row.name) loadDetail(row.name);
+}
+
+function onSheetOpenChange(open) {
+  if (!open) router.push({ path: "/schedules" });
 }
 </script>
