@@ -6,10 +6,21 @@ Reliability-first background job platform for Frappe / ERPNext.
 
 ## Why Conductor (vs Frappe RQ)
 
-Conductor exists because Frappe's stock background-job stack (RQ + Frappe
-scheduler) has gaps that bite at scale. The table below is **measured**,
-not predicted — every cell comes from running both engines on the same
-site (`frappe.localhost`) under the same workload. Reproduce with:
+**At a glance** — measured on the same site, same workload:
+
+- ⚡ **~4× faster throughput** at every job size (1ms · 50ms · 500ms)
+- 🔁 **50× fewer duplicate executions** under concurrent producers (1 vs 50)
+- 📋 **4× more audit detail** when retries fire (100% vs 25% per-attempt records preserved)
+- ♻️ **Recovers transient failures by default** — RQ doesn't retry non-DB exceptions at all
+- 🔍 **DLQ in SQL, retry in 1 command** — RQ needs `bench console` + Python
+
+> Caveat: throughput is from a macOS dev bench. RQ's `fork()`-per-job model is
+> expensive on Darwin; Linux production servers will likely show a smaller gap.
+> Re-measure on your target OS before any throughput-based decision.
+
+Below is **measured**, not predicted — every cell comes from running both
+engines on the same site (`frappe.localhost`) under the same workload.
+Reproduce with:
 
 ```bash
 cd apps/conductor
