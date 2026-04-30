@@ -21,8 +21,18 @@ Measured against Frappe RQ on the same site, same workload, Conductor delivers ~
 
 ## Screenshots
 
-![Overview](docs/screenshots/dashboard-overview.png)
-![Live job feed](docs/screenshots/dashboard-live-feed.png)
+The dashboard ships a sidebar shell with a `light` / `dark` / `system` toggle. Captures below are dark mode against a real running site.
+
+| | |
+|---|---|
+| ![Overview](screenshots/overview.png) | ![Live Feed](screenshots/feed.png) |
+| **Overview** — queue depths, worker count, DLQ pending, schedule count | **Live Feed** — streaming job activity with pause toggle |
+| ![Jobs](screenshots/jobs.png) | ![DLQ](screenshots/dlq.png) |
+| **Jobs** — Tanstack data table with sortable columns + pagination + status filter | **DLQ** — multi-select rows for bulk retry / discard / edit-and-retry |
+| ![Schedules](screenshots/schedules.png) | ![Schedule detail](screenshots/schedules-detail.png) |
+| **Schedules** — cron list with inline enable / disable + Run-now | **Schedule detail** — right-side Sheet with last dispatch, next 10 fires, calendar, recent runs |
+| ![Workers](screenshots/workers.png) | ![Workflows](screenshots/workflows.png) |
+| **Workers** — heartbeat-sorted with hover-tooltip for exact ISO timestamps | **Workflows** — definitions table + recent runs (click a row to filter) |
 
 ## Requirements
 
