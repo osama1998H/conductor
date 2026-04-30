@@ -25,7 +25,16 @@
             :class="['cursor-pointer', row.name === name ? 'bg-muted' : 'hover:bg-muted/50']"
           >
             <TableCell class="font-mono text-xs" @click="open(row.name)">{{ row.name }}</TableCell>
-            <TableCell class="font-mono text-xs" @click="open(row.name)">{{ row.cron_expression }}</TableCell>
+            <TableCell class="font-mono text-xs" @click="open(row.name)">
+              <HoverCard :open-delay="200" :close-delay="100">
+                <HoverCardTrigger as-child>
+                  <span class="cursor-pointer underline-offset-4 hover:underline">{{ row.cron_expression }}</span>
+                </HoverCardTrigger>
+                <HoverCardContent side="top" align="start" class="w-auto max-w-sm text-sm">
+                  {{ cronToEnglish(row.cron_expression) || "Unable to parse expression." }}
+                </HoverCardContent>
+              </HoverCard>
+            </TableCell>
             <TableCell @click="open(row.name)">{{ row.timezone }}</TableCell>
             <TableCell>
               <Switch
@@ -58,7 +67,15 @@
           <SheetHeader>
             <SheetTitle class="font-mono text-base">{{ schedule.name }}</SheetTitle>
             <SheetDescription>
-              <code class="font-mono">{{ schedule.cron_expression }}</code> · {{ schedule.timezone }}
+              <HoverCard :open-delay="200" :close-delay="100">
+                <HoverCardTrigger as-child>
+                  <code class="font-mono cursor-pointer underline-offset-4 hover:underline">{{ schedule.cron_expression }}</code>
+                </HoverCardTrigger>
+                <HoverCardContent side="bottom" align="start" class="w-auto max-w-sm text-sm">
+                  {{ cronToEnglish(schedule.cron_expression) || "Unable to parse expression." }}
+                </HoverCardContent>
+              </HoverCard>
+              · {{ schedule.timezone }}
             </SheetDescription>
           </SheetHeader>
 
@@ -144,6 +161,10 @@ import {
 import {
   Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle,
 } from "@/components/ui/sheet";
+import {
+  HoverCard, HoverCardContent, HoverCardTrigger,
+} from "@/components/ui/hover-card";
+import { cronToEnglish } from "@/lib/cron";
 
 const props = defineProps({ name: String });
 const router = useRouter();
