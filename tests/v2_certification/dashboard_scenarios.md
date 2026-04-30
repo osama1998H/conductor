@@ -9,6 +9,8 @@ Login as Administrator before the first scenario; subsequent scenarios reuse the
 
 For every scenario, run it twice — once in light mode, once in dark mode — using the ModeToggle in the header.
 
+## NOTE: each page has some records try clieck on one of the record and test all the action buttons to check if it working 
+
 ## Overview page
 
 1. **Loads with stats.** Open `/conductor-dashboard`. Expect 4 NumberCards (queue depth, workers, DLQ pending, schedules) + 2 QueueChart cards visible. Screenshot.
