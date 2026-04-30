@@ -1,8 +1,82 @@
+<template>
+  <div class="space-y-6">
+    <section class="space-y-3">
+      <h2 class="text-xl font-semibold">Workflow definitions</h2>
+      <Card class="p-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>Version</TableHead>
+              <TableHead>Active</TableHead>
+              <TableHead>24h</TableHead>
+              <TableHead>Last bump</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow
+              v-for="w in workflows"
+              :key="w.workflow_name"
+              :class="['cursor-pointer', selectedWorkflow === w.workflow_name ? 'bg-muted' : 'hover:bg-muted/50']"
+              @click="selectWorkflow(w.workflow_name)"
+            >
+              <TableCell class="font-mono text-xs">{{ w.workflow_name }}</TableCell>
+              <TableCell>v{{ w.version }}</TableCell>
+              <TableCell>{{ w.active_runs }}</TableCell>
+              <TableCell>{{ w.recent_runs_24h }}</TableCell>
+              <TableCell class="text-2xs text-muted-foreground">{{ w.last_version_bumped_at || "—" }}</TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+        <div v-if="!workflows.length" class="p-6 text-center text-muted-foreground text-sm">
+          No workflows registered.
+        </div>
+      </Card>
+    </section>
+
+    <section class="space-y-3">
+      <h3 class="text-lg font-semibold">
+        {{ selectedWorkflow ? `Runs of ${selectedWorkflow}` : "Recent runs (all workflows)" }}
+      </h3>
+      <Card class="p-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Run ID</TableHead>
+              <TableHead>Workflow</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Started</TableHead>
+              <TableHead>Finished</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow v-for="r in recentRuns" :key="r.name" class="hover:bg-muted/50">
+              <TableCell>
+                <RouterLink :to="`/workflows/runs/${r.name}`" class="font-mono text-primary hover:underline">
+                  {{ r.name }}
+                </RouterLink>
+              </TableCell>
+              <TableCell class="font-mono text-xs">{{ r.workflow }} (v{{ r.definition_version }})</TableCell>
+              <TableCell><StatusBadge :status="r.status" /></TableCell>
+              <TableCell class="text-2xs text-muted-foreground">{{ r.started_at || "—" }}</TableCell>
+              <TableCell class="text-2xs text-muted-foreground">{{ r.finished_at || "—" }}</TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+        <div v-if="!recentRuns.length" class="p-6 text-center text-muted-foreground text-sm">No runs yet.</div>
+      </Card>
+    </section>
+  </div>
+</template>
+
 <script setup>
-import { ref, onMounted } from 'vue';
-import { listWorkflows, listWorkflowRuns } from '../api.js';
-import { useAutoPolling } from '../stores/useDashboardState.js';
-import StatusBadge from '../components/StatusBadge.vue';
+import { ref, onMounted } from "vue";
+import { RouterLink } from "vue-router";
+import { listWorkflows, listWorkflowRuns } from "@/api";
+import { useAutoPolling } from "@/stores/useDashboardState";
+import StatusBadge from "@/components/StatusBadge.vue";
+import { Card } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 const workflows = ref([]);
 const recentRuns = ref([]);
@@ -24,62 +98,3 @@ function selectWorkflow(name) {
   refresh();
 }
 </script>
-
-<template>
-  <div>
-    <h2>Workflows</h2>
-    <table class="w-full border-collapse text-xs mb-6">
-      <thead>
-        <tr>
-          <th class="text-left px-2 py-1.5 border-b border-slate-200">Name</th>
-          <th class="text-left px-2 py-1.5 border-b border-slate-200">Version</th>
-          <th class="text-left px-2 py-1.5 border-b border-slate-200">Active</th>
-          <th class="text-left px-2 py-1.5 border-b border-slate-200">24h</th>
-          <th class="text-left px-2 py-1.5 border-b border-slate-200">Last Bump</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr
-          v-for="w in workflows"
-          :key="w.workflow_name"
-          :class="[
-            'cursor-pointer',
-            selectedWorkflow === w.workflow_name ? 'bg-yellow-100' : 'hover:bg-slate-50',
-          ]"
-          @click="selectWorkflow(w.workflow_name)"
-        >
-          <td class="px-2 py-1.5 border-b border-slate-200">{{ w.workflow_name }}</td>
-          <td class="px-2 py-1.5 border-b border-slate-200">v{{ w.version }}</td>
-          <td class="px-2 py-1.5 border-b border-slate-200">{{ w.active_runs }}</td>
-          <td class="px-2 py-1.5 border-b border-slate-200">{{ w.recent_runs_24h }}</td>
-          <td class="px-2 py-1.5 border-b border-slate-200">{{ w.last_version_bumped_at || '—' }}</td>
-        </tr>
-      </tbody>
-    </table>
-
-    <h3 v-if="selectedWorkflow">Runs of {{ selectedWorkflow }}</h3>
-    <h3 v-else>Recent Runs (all workflows)</h3>
-    <table class="w-full border-collapse text-xs mb-6">
-      <thead>
-        <tr>
-          <th class="text-left px-2 py-1.5 border-b border-slate-200">Run ID</th>
-          <th class="text-left px-2 py-1.5 border-b border-slate-200">Workflow</th>
-          <th class="text-left px-2 py-1.5 border-b border-slate-200">Status</th>
-          <th class="text-left px-2 py-1.5 border-b border-slate-200">Started</th>
-          <th class="text-left px-2 py-1.5 border-b border-slate-200">Finished</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="r in recentRuns" :key="r.name">
-          <td class="px-2 py-1.5 border-b border-slate-200">
-            <router-link :to="`/workflows/runs/${r.name}`">{{ r.name }}</router-link>
-          </td>
-          <td class="px-2 py-1.5 border-b border-slate-200">{{ r.workflow }} (v{{ r.definition_version }})</td>
-          <td class="px-2 py-1.5 border-b border-slate-200"><StatusBadge :status="r.status" /></td>
-          <td class="px-2 py-1.5 border-b border-slate-200">{{ r.started_at || '—' }}</td>
-          <td class="px-2 py-1.5 border-b border-slate-200">{{ r.finished_at || '—' }}</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-</template>
