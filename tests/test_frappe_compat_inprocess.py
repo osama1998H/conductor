@@ -170,3 +170,13 @@ def test_site_has_conductor_returns_true_when_app_installed():
 
     with patch.object(frappe_compat, "_frappe_module", fake_frappe):
         assert frappe_compat._site_has_conductor() is True
+
+
+def test_site_has_conductor_returns_false_when_app_not_installed():
+    """_site_has_conductor returns False when the current site exists but conductor is not in get_installed_apps()."""
+    fake_frappe = MagicMock()
+    fake_frappe.local.site = "alpha"
+    fake_frappe.get_installed_apps = MagicMock(return_value=["frappe", "erpnext"])
+
+    with patch.object(frappe_compat, "_frappe_module", fake_frappe):
+        assert frappe_compat._site_has_conductor() is False
