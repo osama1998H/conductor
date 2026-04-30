@@ -4,6 +4,48 @@ Reliability-first background job platform for Frappe / ERPNext.
 
 ![image](conductor.png)
 
+## Why Conductor (vs Frappe RQ)
+
+Conductor exists because Frappe's stock background-job stack (RQ + Frappe
+scheduler) has gaps that bite at scale. The table below is **measured**,
+not predicted — every cell comes from running both engines on the same
+site (`frappe.localhost`) under the same workload. Reproduce with:
+
+```bash
+cd apps/conductor
+/path/to/bench/env/bin/python -m tests.comparative.run_kpis --kpi 1 --engine both
+# repeat with --kpi 2..5
+```
+
+| KPI | Conductor | Frappe RQ | Conductor wins? |
+|---|---|---|---|
+| **1. Transient-failure recovery** — % of jobs failing with a non-DB exception that recover via the platform's default retry | **100%** (mean 3.00 attempts) | **0%** | ✅ |
+| **2. Per-attempt audit completeness** — records preserved / actual attempts that ran (counter-verified, both engines configured for retries) | **100%** (150/150) | **25%** (50/200 — RQ runs 4 attempts but stores only the last failure per job) | ✅ |
+| **3. DLQ visibility** — failed jobs queryable via SQL? Distinct ops to retry one failed job? | **yes** / **1 op** (`bench conductor dlq retry`) | **no** / **3+ ops** (`bench console` + Python) | ✅ |
+| **4. Dispatch idempotency** — executions per logical job when 50 producers race the same business key (target: 1) | **1** | **50** (RQ has no `idempotency_key` parameter; users *can* manually translate the business key to `job_id` and get partial dedup with registry-eviction caveats — Conductor does this natively) | ✅ |
+| **5. Throughput** — jobs/sec, single worker | 1ms: **144** · 50ms: **49** · 500ms: **7.4** | 1ms: 34 · 50ms: 11 · 500ms: 1.8 | ✅ (4.1–4.3×) |
+
+**What we do *not* claim.** We tested a sixth KPI — "Crash-Survival
+Rate" under worker SIGKILL with a peer alive — and **dropped it because
+RQ matched Conductor**. RQ's `clean_registries` mechanism (called by the
+surviving peer on heartbeat expiry) recovers started-registry orphans
+automatically. The original investigation is preserved at
+[`tests/comparative/_dropped_crash_survival.py`](tests/comparative/_dropped_crash_survival.py)
+and the reasoning is in
+[the KPI plan §3 + §7](docs/superpowers/specs/2026-04-30-conductor-vs-rq-kpi-plan.md).
+A KPI list with one honest "we couldn't prove this" entry is more credible
+than five wins; we'd rather lose one round than overclaim.
+
+KPI 5 caveat: numbers were captured on **macOS dev bench**. RQ workers
+`fork()` per job and macOS fork is expensive; Linux production numbers
+may show a smaller gap. Re-run the throughput KPI on your target OS
+before any throughput-based decision.
+
+For the full methodology, threat model, harness design, and what each
+KPI *cannot* tell you, see
+[`docs/superpowers/specs/2026-04-30-conductor-vs-rq-kpi-plan.md`](docs/superpowers/specs/2026-04-30-conductor-vs-rq-kpi-plan.md).
+
+---
 
 Phase 0 ships the skeleton: dispatcher, worker, doctor, and the three core
 DocTypes (`Conductor Queue`, `Conductor Job`, `Conductor Worker`). No retries,
