@@ -8,8 +8,13 @@ or, programmatically from a pytest:
 
 Output:
     A list of result dicts, one per Scheduled Job Type row, with keys:
-        id, method, frequency, conductor_job_id, status, attempts,
+        id, method, frequency, conductor_job_id, status, attempt,
         duration_ms, error, notes.
+    Status values are uppercase per the Conductor Job DocType options:
+    QUEUED / RUNNING / SUCCEEDED / FAILED / TIMED_OUT / SCHEDULED_RETRY /
+    DLQ / CANCELLED / DISPATCH_FAILED. Terminal statuses (the harness
+    waits for one of these): SUCCEEDED, FAILED, TIMED_OUT, DLQ,
+    CANCELLED, DISPATCH_FAILED.
     Also serializes the list to docs/roadmap/v2-certification/scheduled-jobs.json.
 """
 from __future__ import annotations
@@ -42,7 +47,7 @@ def _list_scheduled_job_types() -> list[dict[str, Any]]:
 def _newest_conductor_job_for(method: str, since_unix: float) -> dict[str, Any] | None:
     rows = frappe.get_all(
         "Conductor Job",
-        fields=["name", "status", "attempts", "creation", "modified"],
+        fields=["name", "status", "attempt", "creation", "modified"],
         filters={"method": method},
         order_by="creation desc",
         limit=1,
@@ -58,16 +63,16 @@ def _wait_for_terminal(job_name: str) -> dict[str, Any]:
         row = frappe.db.get_value(
             "Conductor Job",
             job_name,
-            ["status", "attempts", "modified"],
+            ["status", "attempt", "modified"],
             as_dict=True,
         )
         if not row:
             time.sleep(POLL_INTERVAL_SEC)
             continue
-        if row["status"] in ("Succeeded", "Failed", "DeadLetter"):
+        if row["status"] in ("SUCCEEDED", "FAILED", "TIMED_OUT", "DLQ", "CANCELLED", "DISPATCH_FAILED"):
             return row
         time.sleep(POLL_INTERVAL_SEC)
-    return frappe.db.get_value("Conductor Job", job_name, ["status", "attempts", "modified"], as_dict=True) or {}
+    return frappe.db.get_value("Conductor Job", job_name, ["status", "attempt", "modified"], as_dict=True) or {}
 
 
 def trigger_one(sjt: dict[str, Any]) -> dict[str, Any]:
@@ -80,7 +85,7 @@ def trigger_one(sjt: dict[str, Any]) -> dict[str, Any]:
         "frequency": sjt["frequency"],
         "conductor_job_id": None,
         "status": None,
-        "attempts": None,
+        "attempt": None,
         "duration_ms": None,
         "error": None,
         "notes": "",
@@ -102,7 +107,7 @@ def trigger_one(sjt: dict[str, Any]) -> dict[str, Any]:
     result["conductor_job_id"] = job["name"]
     final = _wait_for_terminal(job["name"])
     result["status"] = final.get("status")
-    result["attempts"] = final.get("attempts")
+    result["attempt"] = final.get("attempt")
     result["duration_ms"] = int((time.time() - started) * 1000)
     if result["status"] is None:
         result["error"] = f"poll timed out after {POLL_TIMEOUT_SEC}s"
