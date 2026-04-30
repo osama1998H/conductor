@@ -105,14 +105,20 @@ def maybe_install_inprocess_patch() -> None:
     Reads the flag from `frappe.conf` (which Frappe builds by merging
     common_site_config.json + the active site's site_config.json) so the
     activation can be set bench-wide. Failures here MUST NOT break import:
-    the v1 HTTP shim still works without this bootstrap.
+    the v1 HTTP shim still works without this bootstrap. Failures emit a
+    best-effort warning via frappe.logger so operators have a breadcrumb
+    when the patch should be active but isn't.
     """
     try:
         conf = getattr(_frappe_module, "conf", None) or {}
         if not conf.get("conductor_intercept_frappe_enqueue", False):
             return
         install_inprocess_patch()
-    except Exception:
-        # Bootstrap must never break import. Once the M8 doctor health-gate
-        # lands, mis-configurations surface there.
-        pass
+    except Exception as exc:
+        try:
+            _frappe_module.logger("conductor").warning(
+                "conductor: bootstrap of in-process frappe.enqueue patch failed: %s",
+                exc,
+            )
+        except Exception:
+            pass

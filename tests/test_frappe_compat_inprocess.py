@@ -221,3 +221,33 @@ def test_bootstrap_swallows_exceptions_silently():
         frappe_compat.maybe_install_inprocess_patch()
 
     assert fake_frappe.enqueue is original
+
+
+def test_bootstrap_swallows_install_failure_silently():
+    """If install_inprocess_patch itself raises, maybe_install_inprocess_patch does not propagate."""
+    fake_frappe = MagicMock()
+    fake_frappe.conf = {"conductor_intercept_frappe_enqueue": True}
+    original = MagicMock()
+    fake_frappe.enqueue = original
+
+    with patch.object(frappe_compat, "_frappe_module", fake_frappe), \
+         patch.object(frappe_compat, "install_inprocess_patch", side_effect=RuntimeError("kaboom")):
+        # Must not raise.
+        frappe_compat.maybe_install_inprocess_patch()
+
+    # The install attempt aborted — frappe.enqueue is unchanged.
+    assert fake_frappe.enqueue is original
+
+
+def test_bootstrap_logs_warning_on_install_failure():
+    """When install_inprocess_patch raises, the bootstrap routes the failure through frappe.logger."""
+    fake_frappe = MagicMock()
+    fake_frappe.conf = {"conductor_intercept_frappe_enqueue": True}
+    fake_frappe.enqueue = MagicMock()
+
+    with patch.object(frappe_compat, "_frappe_module", fake_frappe), \
+         patch.object(frappe_compat, "install_inprocess_patch", side_effect=RuntimeError("kaboom")):
+        frappe_compat.maybe_install_inprocess_patch()
+
+    fake_frappe.logger.assert_called_with("conductor")
+    fake_frappe.logger.return_value.warning.assert_called_once()
