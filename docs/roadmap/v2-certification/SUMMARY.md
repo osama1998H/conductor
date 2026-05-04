@@ -26,7 +26,7 @@ recorded by Conductor — exactly the v2 KPI in action).
 | M1 | `baseline.md` | ✅ commits 9ab5109, 5951508, 955ffd4 |
 | M2 | `scheduled-jobs.md` (105 rows × 4-day soak) | ✅ commit e40589a |
 | M3 | `cli.md` (7 automated scenarios + interactive) | ✅ commit e05f8f8 |
-| M4 | `dashboard.md` (27 scenarios via `expect` MCP) | ✅ commit `<HASH-5>` |
+| M4 | `dashboard.md` (27 scenarios via `expect` MCP) | ✅ commit `321e987` |
 | M5 | `multi-worker.md` (concurrency + reclaim findings) | ✅ commit 4e7ab7e |
 | M6 | `soak.md` (4-day natural-cron coverage) | ✅ commit 0c428f0 |
 
@@ -64,7 +64,7 @@ recorded by Conductor — exactly the v2 KPI in action).
 7. **Dashboard surface (M4)** captured 2026-05-04 via `expect` MCP
    (agent-driven, not human-driven — clarification: `expect` is an
    agent capability). 27 scenarios × {light, dark} written up in
-   `docs/roadmap/v2-certification/dashboard.md` (commit `<HASH-5>`).
+   `docs/roadmap/v2-certification/dashboard.md` (commit `321e987`).
    Pass: 18; pass-with-caveat: 4; fail: 3; deferred: 2. Six new
    findings (D1–D6) folded into the Plan-3 backlog — most notably
    the same UTC-vs-local TZ class manifesting in the Overview
@@ -100,7 +100,7 @@ recorded by Conductor — exactly the v2 KPI in action).
 - ✅ Finding 4: process-supervision recommendation in architecture doc (commit `d81f3b0`)
 - ✅ Finding 5: inflight-cap test re-run; pass (commit `032fd65`)
 - ✅ CLI gaps: cancel + schedule run-now automated (commit `c4a5f6f`)
-- ✅ Finding 7: M4 dashboard matrix — captured 2026-05-04 via agent-driven `expect` MCP (commit `<HASH-5>`). 27 scenarios in `docs/roadmap/v2-certification/dashboard.md`; six new findings (D1–D6) added to the Plan-3 backlog.
+- ✅ Finding 7: M4 dashboard matrix — captured 2026-05-04 via agent-driven `expect` MCP (commit `321e987`). 27 scenarios in `docs/roadmap/v2-certification/dashboard.md`; six new findings (D1–D6) added to the Plan-3 backlog.
 
 Plan-2 closes the M7 fix backlog in full — five fix-and-document
 items plus the M4 dashboard pass are all green. Six new dashboard
