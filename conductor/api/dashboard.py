@@ -27,6 +27,7 @@ from conductor.streams import stream_key
 from conductor.scheduled import scheduled_redis_key
 from conductor import cancellation as _cancellation
 from conductor.serialization import loads as _msgpack_loads
+from conductor.worker import now_naive
 
 
 def _require_read() -> None:
@@ -370,7 +371,7 @@ def get_worker(worker_id: str) -> dict[str, Any]:
     worker = frappe.get_doc("Conductor Worker", worker_id).as_dict()
     last_hb = worker.get("last_heartbeat")
     if last_hb:
-        delta = (frappe.utils.now_datetime() - last_hb).total_seconds()
+        delta = (now_naive() - last_hb).total_seconds()
         worker["heartbeat_age_seconds"] = max(0, int(delta))
     else:
         worker["heartbeat_age_seconds"] = None
