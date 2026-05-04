@@ -3,7 +3,7 @@
     <div class="flex items-center gap-4">
       <h2 class="text-xl font-semibold">Live Feed</h2>
       <div class="flex items-center gap-2">
-        <Switch id="pause" v-model:checked="paused" />
+        <Switch id="pause" v-model="paused" />
         <Label for="pause">Pause updates</Label>
       </div>
       <span class="text-xs text-muted-foreground">

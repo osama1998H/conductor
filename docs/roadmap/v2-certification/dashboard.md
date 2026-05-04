@@ -160,6 +160,41 @@ to read what was passed in. Plan-3 should either add the inline
 expansion or document the click-through-to-Job pattern as the intended
 flow.
 
+### Finding D7 — Schedules / DLQ / Feed: Switch/Checkbox prop name mismatch — FIXED in Plan-3 Phase B
+
+User flagged this on 2026-05-04 mid-Plan-3: Overview NumberCard reads
+`SCHEDULES ENABLED: 3` but the Schedules page rendered all four toggles
+as OFF. Root cause: shadcn-vue's `Switch` and `Checkbox` components
+declare `modelValue` with `update:modelValue` as their emit, but three
+sites in the dashboard passed `:checked` / `@update:checked` instead,
+so the prop was unbound (component defaulted to unchecked) and the
+parent handler never fired:
+
+- `dashboard/src/pages/SchedulesPage.vue:40-43` — row enabled toggle.
+  All four schedules rendered OFF regardless of DB enabled value.
+- `dashboard/src/components/DlqDataTable.vue:46-47` — row checkbox.
+  Click flipped Checkbox's internal state but never propagated to the
+  parent's `selected` set, so the bulk-action surface (when added in
+  B.2) couldn't have worked. This also means D4's "row checkboxes
+  (selection state tracked correctly via `aria-checked`)" was an
+  incorrect observation at M4 time — the checkboxes visually toggled
+  but the parent `selected` set never grew.
+- `dashboard/src/pages/FeedPage.vue:6` — pause-updates Switch was bound
+  via the bogus `v-model:checked="paused"` form. Switch internally
+  toggled but the ref never updated.
+
+Fix is mechanical: rename `:checked` → `:model-value` and
+`@update:checked` → `@update:model-value` (or `v-model:checked` →
+`v-model`). No logic changes — once the binding works, the existing
+parent handlers (`onToggleEnabled`, `$emit('toggle-select')`, `paused`
+ref) take effect.
+
+**FIXED in commit <HASH-D7>** (backfill SHA after commit). Dashboard
+build green; live smoke confirms the three enabled schedules render
+with `aria-checked="true"` and demo-nightly-cleanup renders
+`aria-checked="false"`, matching the DB and the Overview NumberCard
+count. Screenshot: `D7-schedules-after-fix.png`.
+
 ## Catalog drift summary
 
 The dashboard scenarios catalog at
