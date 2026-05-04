@@ -11,7 +11,7 @@ The unit of isolation is the **site**. Every Redis key is namespaced `conductor:
 - **Dispatcher** — `enqueue(...)` writes the `Conductor Job` row, then `XADD`s the encoded message to the stream. Reserves the idempotency slot first; if a prior job holds the slot, returns that job's id without enqueuing again.
 - **Stream** — Redis Stream, one per `(site, queue)`. Producers `XADD`; workers `XREADGROUP` from the `conductor` consumer group. Trimmed to `conductor.stream_max_len` on each write (approximate, via `MAXLEN ~`).
 - **Worker** — long-lived process. Pulls messages, runs each job in a thread-pool slot, manages per-attempt deadlines, writes status flips back to MariaDB, and `XACK`s on terminal outcomes. Heartbeats to Redis.
-- **Scheduler** — singleton-per-site process. Holds a Redis lock with TTL; renews while alive. Runs the cron loop, the retry-delay drain, the dead-worker reaper, and the orphan sweeper.
+- **Scheduler** — singleton-per-site process. Holds a Redis lock with TTL; renews while alive. Runs the cron loop, the retry-delay drain, the dead-worker reaper, the orphan sweeper, and (opt-in) the Frappe scheduled-job takeover loop.
 - **Sweeper** — promotes terminally-failed jobs into `Conductor DLQ Entry` rows; runs as a scheduler loop.
 - **Dashboard** — Vue 3 SPA backed by `conductor.api.dashboard`. Polls `get_state` for aggregates; per-job realtime updates flow through Frappe's socketio.
 
@@ -84,6 +84,7 @@ The scheduler's loops are:
 2. **Retry-delay drain** — pop due members of `conductor:{site}:scheduled` and `XADD` them back to their target stream.
 3. **Reaper** — mark heartbeat-expired workers `GONE`. Adjust the `inflight` counter to compensate for capped jobs the dead worker held.
 4. **Sweeper** — for jobs whose retry budget is exhausted, write a `Conductor DLQ Entry` row, set the job status to `DLQ`, and `XACK` the stream entry.
+5. **Frappe scheduled-job takeover** *(opt-in)* — when `conductor_take_over_frappe_scheduler: true` is set in `common_site_config.json`, this loop reads `tabScheduled Job Type` rows once per minute, asks each row's own `is_event_due()` (Frappe's logic), and dispatches due rows through `conductor.enqueue` with `max_attempts=1`. Pair with `pause_scheduler: 1` so Frappe's own scheduler does not double-fire each row. Walkthrough: [`how-to-route-frappe-scheduled-jobs.md`](how-to-route-frappe-scheduled-jobs.md).
 
 ---
 

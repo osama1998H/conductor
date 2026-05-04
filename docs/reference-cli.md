@@ -2,7 +2,7 @@
 
 Reference for every `bench conductor *` subcommand. Each section gives the synopsis, options, examples, and exit codes.
 
-Most subcommands take the site from `bench --site SITE`. Two subcommand groups (`dlq` and `migrate-from-rq`) take `--site` as their own required option instead — examples below use the form each command actually expects.
+Most subcommands take the site from `bench --site SITE`. `migrate-from-rq` is the lone exception — it takes its own required `--site` option. `dlq` accepts both forms: `--site` is optional and falls back to the bench `--site` context when omitted.
 
 Run all examples from the **bench root** (e.g. `/path/to/frappe_15`), not from inside `apps/conductor`.
 
@@ -65,7 +65,7 @@ bench --site frappe.localhost conductor scheduler
 
 ## `doctor`
 
-Run a fixed set of health checks against the Conductor install on a site. Used both as an acceptance test and as an on-call smoke test.
+Run health checks against the Conductor install on a site. Used both as an acceptance test and as an on-call smoke test.
 
 ```bash
 bench --site SITE conductor doctor [--demo]
@@ -73,19 +73,35 @@ bench --site SITE conductor doctor [--demo]
 
 | Option | Default | Meaning |
 |---|---|---|
-| `--demo` | off | After the fixed checks, also run a full enqueue → dispatch → execute → status round-trip. |
+| `--demo` | off | After the standard checks, run a full enqueue → dispatch → execute → status round-trip. Adds checks `[8/9]` and `[9/9]`. |
 
 ```bash
 bench --site frappe.localhost conductor doctor
 bench --site frappe.localhost conductor doctor --demo
 ```
 
+**Checks**
+
+| # | Label | When it runs | What it verifies |
+|---|---|---|---|
+| `[1/9]` | Redis connectivity | always | `PING` succeeds against `conductor.redis_url`. |
+| `[2/9]` | Default queues seeded | always | The five default `Conductor Queue` rows exist and are enabled. |
+| `[3/9]` | Consumer groups exist | always | Every queue has the `conductor` consumer group registered. |
+| `[4/9]` | XADD/XREADGROUP/XACK round-trip | always | A throwaway message round-trips through one queue's stream. |
+| `[5/9]` | Takeover queue coverage | always | When `conductor_take_over_frappe_scheduler: true`, every queue named in the merged frequency map has a heartbeat-fresh worker listening. Skipped (passes) when takeover is off. |
+| `[6/9]` | Pause scheduler when takeover active | always | When `conductor_take_over_frappe_scheduler: true`, `pause_scheduler` must be true so Frappe's own scheduler does not double-fire each row. Skipped (passes) when takeover is off. |
+| `[7/9]` | `frappe.enqueue` shim active | always | When `conductor_intercept_frappe_enqueue: true`, the in-process patch is installed. Skipped (passes) when intercept is off. |
+| `[8/9]` | End-to-end demo dispatch | `--demo` only | Enqueues `conductor.demo.echo` and waits for a worker to claim and finish it. |
+| `[9/9]` | Result round-trip | `--demo` only | Verifies the result preview written by step 8 reads back correctly. |
+
+Without `--demo`, `doctor` prints lines `[1/9]` through `[7/9]`. With `--demo`, all nine print. Every line is formatted `<label>...... OK  (<detail>)` on success and `<label>...... FAIL (<actionable error>)` on failure, where `<detail>` is the short string the check itself returned (e.g. `takeover disabled — skipped`, `5 queues seeded`, `pause_scheduler set as required`).
+
 **Exit codes**
 
 | Code | Meaning |
 |---|---|
 | `0` | All checks passed. |
-| `1` | One or more checks failed. The failing check name is the last line of stderr. |
+| `1` | One or more checks failed. The failing check's actionable detail is the last line of stderr. |
 
 ---
 
@@ -138,25 +154,25 @@ bench --site SITE conductor schedule run-now hourly-billing
 
 ## `dlq`
 
-Operational subcommands over `Conductor DLQ Entry` rows. Unlike most subcommands, `dlq` takes its own required `--site` option.
+Operational subcommands over `Conductor DLQ Entry` rows. The site comes from `bench --site SITE` by default; pass `--site` explicitly to override.
 
 ### `dlq list`
 
 List DLQ entries, newest first.
 
 ```bash
-bench conductor dlq list --site SITE [OPTIONS]
+bench --site SITE conductor dlq list [OPTIONS]
 ```
 
 | Option | Default | Meaning |
 |---|---|---|
-| `--site SITE` | required | Frappe site name. |
+| `--site SITE` | bench `--site` | Frappe site name. Overrides the bench `--site` context. |
 | `--queue NAME` | all | Filter to one queue. |
 | `--status STATE` | all | One of `PENDING_REVIEW`, `RETRIED`, `DISCARDED`. |
 | `--limit N` | `50` | Max rows to print. |
 
 ```bash
-bench conductor dlq list --site frappe.localhost --queue default --limit 20
+bench --site frappe.localhost conductor dlq list --queue default --limit 20
 ```
 
 ### `dlq retry`
@@ -164,19 +180,19 @@ bench conductor dlq list --site frappe.localhost --queue default --limit 20
 Re-enqueue `PENDING_REVIEW` entries via `conductor.enqueue` and mark each row `RETRIED`. Pinning to a single job uses `--job`.
 
 ```bash
-bench conductor dlq retry --site SITE [OPTIONS]
+bench --site SITE conductor dlq retry [OPTIONS]
 ```
 
 | Option | Default | Meaning |
 |---|---|---|
-| `--site SITE` | required | Frappe site name. |
+| `--site SITE` | bench `--site` | Frappe site name. Overrides the bench `--site` context. |
 | `--queue NAME` | all | Filter to one queue. |
 | `--limit N` | `50` | Max rows to retry in one invocation. |
 | `--job ID` | none | Operate on this specific `Conductor Job` id only. |
 
 ```bash
-bench conductor dlq retry --site frappe.localhost --queue default --limit 50
-bench conductor dlq retry --site frappe.localhost --job <job_id>
+bench --site frappe.localhost conductor dlq retry --queue default --limit 50
+bench --site frappe.localhost conductor dlq retry --job <job_id>
 ```
 
 ### `dlq discard`
@@ -184,13 +200,13 @@ bench conductor dlq retry --site frappe.localhost --job <job_id>
 Mark `PENDING_REVIEW` entries `DISCARDED` without re-enqueuing. Destructive — the underlying job is not run again.
 
 ```bash
-bench conductor dlq discard --site SITE [OPTIONS]
+bench --site SITE conductor dlq discard [OPTIONS]
 ```
 
 Options match `dlq retry`.
 
 ```bash
-bench conductor dlq discard --site frappe.localhost --job <job_id>
+bench --site frappe.localhost conductor dlq discard --job <job_id>
 ```
 
 ---

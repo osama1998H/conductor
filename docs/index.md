@@ -14,6 +14,7 @@ You install, run, and triage Conductor on a site.
 
 - [Tutorial — Get started with Conductor](tutorial-getting-started.md)
 - [How-to — Schedule jobs](how-to-schedule-jobs.md)
+- [How-to — Route Frappe `Scheduled Job Type` rows through Conductor](how-to-route-frappe-scheduled-jobs.md)
 - [How-to — Triage failures](how-to-triage-failures.md)
 - [How-to — Run multi-tenant](how-to-run-multi-tenant.md)
 - [How-to — Migrate from RQ](how-to-migrate-from-rq.md)
