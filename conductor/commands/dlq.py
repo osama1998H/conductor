@@ -1,6 +1,5 @@
 """bench conductor dlq {list,retry,discard} — operational subcommands over
-Conductor DLQ Entry rows. retry/discard live here too but are added in
-Task 14."""
+Conductor DLQ Entry rows."""
 
 from __future__ import annotations
 
@@ -135,7 +134,8 @@ def _mark_dlq_row(name: str, payload: dict) -> None:
 
 
 @dlq_group.command("retry")
-@click.option("--site", default=None)
+@click.option("--site", default=None,
+              help="Frappe site name. Defaults to the bench --site context.")
 @click.option("--queue", default=None)
 @click.option("--limit", default=50, type=int)
 @click.option("--job", "job_id", default=None,
@@ -172,7 +172,8 @@ def retry_command(ctx, site, queue, limit, job_id):
 
 
 @dlq_group.command("discard")
-@click.option("--site", default=None)
+@click.option("--site", default=None,
+              help="Frappe site name. Defaults to the bench --site context.")
 @click.option("--queue", default=None)
 @click.option("--limit", default=50, type=int)
 @click.option("--job", "job_id", default=None)

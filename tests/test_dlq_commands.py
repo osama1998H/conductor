@@ -185,3 +185,25 @@ def test_dlq_list_inherits_site_from_bench_context():
         )
     assert result.exit_code == 0, result.output
     assert captured.get("site") == "frappe.localhost"
+
+
+def test_dlq_list_explicit_site_overrides_context():
+    """Explicit --site must win over the bench context's sites[0]. Pins
+    the `or` semantics in `site = site or get_site(ctx)`."""
+    from conductor.commands.dlq import dlq_group
+    runner = CliRunner()
+    captured = {}
+
+    def fake_connect(site):
+        captured["site"] = site
+
+    with patch("conductor.commands.dlq._fetch_dlq_rows", return_value=_fake_dlq_rows()), \
+         patch("conductor.commands.dlq._connect_to_site", side_effect=fake_connect), \
+         patch("conductor.commands.dlq._disconnect"):
+        result = runner.invoke(
+            dlq_group,
+            ["list", "--site", "explicit.site"],
+            obj={"sites": ["context.site"], "profile": False},
+        )
+    assert result.exit_code == 0, result.output
+    assert captured.get("site") == "explicit.site"
