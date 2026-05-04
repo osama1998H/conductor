@@ -189,7 +189,7 @@ Fix is mechanical: rename `:checked` → `:model-value` and
 parent handlers (`onToggleEnabled`, `$emit('toggle-select')`, `paused`
 ref) take effect.
 
-**FIXED in commit <HASH-D7>** (backfill SHA after commit). Dashboard
+**FIXED in commit 0be78a2** (backfill SHA after commit). Dashboard
 build green; live smoke confirms the three enabled schedules render
 with `aria-checked="true"` and demo-nightly-cleanup renders
 `aria-checked="false"`, matching the DB and the Overview NumberCard
