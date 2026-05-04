@@ -13,6 +13,7 @@ If you are new, start with the [tutorial](tutorial-getting-started.md). If you k
 You install, run, and triage Conductor on a site.
 
 - [Tutorial — Get started with Conductor](tutorial-getting-started.md)
+- [How-to — Deploy on Frappe Cloud](how-to-deploy-on-frappe-cloud.md)
 - [How-to — Schedule jobs](how-to-schedule-jobs.md)
 - [How-to — Route Frappe `Scheduled Job Type` rows through Conductor](how-to-route-frappe-scheduled-jobs.md)
 - [How-to — Triage failures](how-to-triage-failures.md)
