@@ -37,7 +37,7 @@ The campaign discovered that 248 jobs (all on the `long` queue) were stranded in
 
 **Fix:** Procfile updated to `--queue default --queue long`. After restart, all 248 stranded jobs flushed to SUCCEEDED in seconds.
 
-**Operator footgun:** the doctor health-gate (M7 — landed in commit `<HASH-2>`)
+**Operator footgun:** the doctor health-gate (M7 — landed in commit `72a54aa`)
 warns when the takeover loop is enabled but the bench worker(s) collectively
 don't cover every queue the queue-map produces. Pre-emptively catches the
 stuck-QUEUED bug before it strands a single dispatch.

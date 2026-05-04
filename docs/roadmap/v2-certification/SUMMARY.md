@@ -38,7 +38,7 @@ recorded by Conductor — exactly the v2 KPI in action).
 2. **Queue-mismatch operator footgun** (M2). Takeover loop's queue-map
    sends Daily/Weekly/Monthly to `long`. If the bench worker doesn't
    listen on `long`, jobs strand silently. **Fix:** Procfile updated to
-   `--queue default --queue long`. **M7 fix landed in commit `<HASH-2>`:**
+   `--queue default --queue long`. **M7 fix landed in commit `72a54aa`:**
    `bench conductor doctor` now warns when worker queue coverage doesn't
    match the takeover queue-map's range.
 3. **`bench conductor dlq list` does NOT inherit bench's `--site`**
@@ -55,7 +55,7 @@ recorded by Conductor — exactly the v2 KPI in action).
 5. **Inflight-cap test deferred** (M5). **M7 resolution:** re-ran on
    2026-05-04 with `max_concurrent = 2` against the two-worker setup;
    inflight stayed ≤ 2 for the entire 60-second window across 200
-   jobs and all reached SUCCEEDED. Captured in `multi-worker.md`. (Commit `<HASH-4>`.)
+   jobs and all reached SUCCEEDED. Captured in `multi-worker.md`. (Commit `032fd65`.)
 6. **Real upstream-Frappe DLQ entry** caught: `delete_dynamic_links()
    got an unexpected keyword argument 'now'` (M3 finding). Not a
    Conductor bug; an HRMS/erpnext API mismatch. Demonstrates the v2
@@ -85,10 +85,43 @@ recorded by Conductor — exactly the v2 KPI in action).
 - Backups for restoration: `Procfile.pre-v2`,
   `sites/common_site_config.json.pre-v2`.
 
+## Plan-2 (M7) status — 2026-05-04
+
+- ✅ Finding 3: dlq subcommands inherit --site (commit `c4d0bde`, follow-up `c94d044`)
+- ✅ Finding 2: doctor warns on takeover queue-coverage gap (commit `72a54aa`, follow-ups `b1ea19b` + `a801881`)
+- ✅ Finding 4: process-supervision recommendation in architecture doc (commit `d81f3b0`)
+- ✅ Finding 5: inflight-cap test re-run; pass (commit `032fd65`)
+- ✅ CLI gaps: cancel + schedule run-now automated (commit `c4a5f6f`)
+- ⏳ Finding 7: M4 dashboard matrix — DEFERRED. Requires a human-driven `expect` MCP browser session walking the 27 scenarios in `tests/v2_certification/dashboard_scenarios.md`. Cannot be subagent-driven; the user picks this up when they next have an `expect` MCP session available. When done, the dashboard.md matrix lands and this bullet flips to ✅ with `<HASH-5>`.
+
+Plan-2 closes the M7 fix backlog as far as automation reaches. The
+five fix-and-document items are all green; the dashboard pass remains
+open as a user task. Comparative KPI re-run + M8 stretch hardening +
+v2.0.0 release belong to Plan-3.
+
+## Pre-existing finding surfaced during Plan-2
+
+Plan-2 Tasks 4+5 surfaced an existing TZ inconsistency in
+`conductor/scheduler_loops.py:152` — the reaper computes its
+heartbeat-age threshold via `datetime.now()` (local-naive) while
+workers write `last_heartbeat` via `_now_naive()` (UTC-naive). The
+reaper has been incorrectly marking workers GONE on any non-UTC
+bench, but the workers re-assert `status='ALIVE'` every heartbeat,
+which races the reaper's mark and masks the bug in production. The
+new doctor check correctly uses UTC-naive (`b1ea19b`); the reaper
+fix is a one-liner that belongs in Plan-3 alongside the rest of the
+hardening pass.
+
 ## What's next
 
-- **Plan-2 (M7).** Write after this session, informed by the findings
-  backlog above. Items 2, 3, 4, 5, 7 are concrete code/doc changes.
-- **Plan-3 (M8 + M9).** Stretch hardening (Procfile.conductor rewrite,
-  `add_to_apps_screen` enable, doctor health-gate, optional CI smoke
-  loop) + v2.0.0 release.
+- **Dashboard M4** (this plan, deferred to user): walk
+  `tests/v2_certification/dashboard_scenarios.md` × {light, dark}
+  via `expect` MCP, populate
+  `docs/roadmap/v2-certification/dashboard.md`, mark Finding 7 ✅.
+- **Plan-3 (M8 + reaper TZ fix + KPI re-run + v2.0.0 release).**
+  Stretch hardening (Procfile.conductor production shape,
+  add_to_apps_screen enable, doctor's full health-gate including
+  pause_scheduler assertion + shim assertion, optional CI smoke loop),
+  reaper TZ fix surfaced above, comparative KPI re-run as a release
+  gate, README + docs/index.md refresh, and the v2.0.0 tag + GitHub
+  release notes.

@@ -36,7 +36,7 @@
 
 ## Findings
 
-### Finding 1: FIXED (commit `<HASH-1>`)
+### Finding 1: FIXED (commit `c4d0bde`)
 
 `dlq list/retry/discard` now inherit `--site` from the bench Click
 context via `pass_context` + `get_site`, matching the pattern used by
