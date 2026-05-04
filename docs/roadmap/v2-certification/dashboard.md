@@ -108,7 +108,7 @@ backend's `if workflow:` filter saw `"null"` (truthy) and queried
 `workflow = "null"`, matching no rows. Recent runs table was always
 empty regardless of how many workflow runs existed in the DB.
 
-**Fixed (commit <HASH-D3> — fill in commit SHA after commit):**
+**Fixed (commit 90173e5):**
 
 - Frontend: `dashboard/src/api.js:listWorkflowRuns` no longer passes JS
   null/undefined into the query string. The workflow / status / offset
