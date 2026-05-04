@@ -4,6 +4,8 @@ Conductor is a reliability-first background job platform for Frappe / ERPNext. T
 
 If you are new, start with the [tutorial](tutorial-getting-started.md). If you know Conductor and need a specific answer, jump to the right column below.
 
+**v2.0.0 status:** empirically certified — four-day campaign on a real Frappe + HRMS bench produced 9300+ successful dispatches, 0 failed, every active `Scheduled Job Type` row caught by Conductor's takeover loop. Full certification: [`roadmap/v2-certification/`](roadmap/v2-certification/). v2 roadmap (M1–M9 + v2.1 backlog): [`roadmap/v2.md`](roadmap/v2.md).
+
 ---
 
 ## Operate Conductor
