@@ -87,6 +87,160 @@ def _evaluate(observed: dict[str, Any], expected: dict[str, Any]) -> tuple[bool,
     return True, ""
 
 
+import time as _time
+
+
+def _connect_frappe():
+    """Initialize a Frappe context for ORM access from inside cli_runner.
+
+    cli_runner is run via `python -m tests.v2_certification.cli_runner` from
+    the conductor app dir; we need to point it at the bench's sites/apps."""
+    import os, sys
+    os.chdir("/Users/osamamuhammed/frappe_15/sites")
+    for p in (
+        "/Users/osamamuhammed/frappe_15/sites",
+        "/Users/osamamuhammed/frappe_15/apps/frappe",
+        "/Users/osamamuhammed/frappe_15/apps/conductor",
+    ):
+        if p not in sys.path:
+            sys.path.insert(0, p)
+    import frappe
+    frappe.init(site=SITE, sites_path="/Users/osamamuhammed/frappe_15/sites")
+    frappe.connect()
+    return frappe
+
+
+def _scenario_cancel_live() -> dict[str, Any]:
+    """Enqueue a long-running sleep job, run `bench conductor cancel <id>`,
+    wait up to 10s for the job's status to flip to CANCELLED. The cap
+    (max_concurrent etc.) does not matter here — we are exercising the
+    CLI surface, not the worker."""
+    label = "cancel"
+    frappe = _connect_frappe()
+    try:
+        import conductor
+        job_id = conductor.enqueue("conductor.demo.sleep", queue="default", seconds=30)
+    finally:
+        frappe.destroy()
+
+    run = _run(label, ["cancel", job_id])
+
+    # Wait briefly for the worker to observe cancellation. Don't hold a
+    # frappe connection across the sleep loop — re-init each poll.
+    final_status = None
+    deadline = _time.time() + 10
+    while _time.time() < deadline:
+        frappe = _connect_frappe()
+        try:
+            frappe.db.rollback()
+            final_status = frappe.db.get_value("Conductor Job", job_id, "status")
+        finally:
+            frappe.destroy()
+        if final_status in ("CANCELLED", "TIMED_OUT", "SUCCEEDED", "FAILED"):
+            break
+        _time.sleep(0.5)
+
+    ok = (run["exit"] == 0) and (final_status == "CANCELLED")
+    why = ""
+    if run["exit"] != 0:
+        why = f"exit {run['exit']} != 0"
+    elif final_status != "CANCELLED":
+        why = f"final status {final_status!r} != 'CANCELLED'"
+    run["pass"] = ok
+    run["fail_reason"] = why
+    run["final_status"] = final_status
+    return run
+
+
+SCHEDULE_RUN_NOW_NAME = "v2cert-schedule-run-now"
+
+
+def _scenario_schedule_run_now_live() -> dict[str, Any]:
+    """Insert a temp `Conductor Schedule` on conductor.demo.echo, run
+    `bench conductor schedule run-now <name>`, assert a Conductor Job
+    with that method appears within 10s. Idempotent: deletes the temp
+    row at the end so re-runs work."""
+    label = "schedule run-now"
+    frappe = _connect_frappe()
+    seed_failed = None
+    try:
+        if not frappe.db.exists("Conductor Schedule", SCHEDULE_RUN_NOW_NAME):
+            try:
+                frappe.get_doc({
+                    "doctype": "Conductor Schedule",
+                    "schedule_name": SCHEDULE_RUN_NOW_NAME,
+                    "method": "conductor.demo.echo",
+                    "queue": "default",
+                    "cron_expression": "* * * * *",
+                    "enabled": 1,
+                }).insert(ignore_permissions=True)
+                frappe.db.commit()
+            except Exception as e:
+                seed_failed = f"seed failed: {type(e).__name__}: {e}"
+        # Capture creation cutoff so we only count jobs created by THIS run.
+        from datetime import datetime, timezone
+        cutoff_naive = datetime.now(timezone.utc).replace(tzinfo=None)
+    finally:
+        frappe.destroy()
+
+    if seed_failed:
+        return {
+            "label": label,
+            "argv": ["bench", "--site", SITE, "conductor", "schedule", "run-now", SCHEDULE_RUN_NOW_NAME],
+            "exit": -1, "stdout": "", "stderr": seed_failed,
+            "pass": False, "fail_reason": seed_failed,
+        }
+
+    run = _run(label, ["schedule", "run-now", SCHEDULE_RUN_NOW_NAME])
+
+    # Wait up to 10s for a fresh Conductor Job on conductor.demo.echo.
+    found_job = None
+    deadline = _time.time() + 10
+    while _time.time() < deadline:
+        frappe = _connect_frappe()
+        try:
+            frappe.db.rollback()
+            rows = frappe.get_all(
+                "Conductor Job",
+                filters={
+                    "method": "conductor.demo.echo",
+                    "creation": [">=", cutoff_naive],
+                },
+                fields=["name", "status"],
+                order_by="creation desc",
+                limit=1,
+            )
+        finally:
+            frappe.destroy()
+        if rows:
+            found_job = rows[0]
+            break
+        _time.sleep(0.5)
+
+    # Teardown — delete the temp Schedule row whether or not the assertion passed.
+    try:
+        frappe = _connect_frappe()
+        try:
+            if frappe.db.exists("Conductor Schedule", SCHEDULE_RUN_NOW_NAME):
+                frappe.delete_doc("Conductor Schedule", SCHEDULE_RUN_NOW_NAME, force=True)
+                frappe.db.commit()
+        finally:
+            frappe.destroy()
+    except Exception:
+        pass  # Don't mask the scenario's own pass/fail with a teardown error.
+
+    ok = (run["exit"] == 0) and (found_job is not None)
+    why = ""
+    if run["exit"] != 0:
+        why = f"exit {run['exit']} != 0"
+    elif found_job is None:
+        why = "no Conductor Job appeared within 10s"
+    run["pass"] = ok
+    run["fail_reason"] = why
+    run["found_job"] = found_job
+    return run
+
+
 def run_all() -> list[dict[str, Any]]:
     results = []
     for sc in SCENARIOS:
@@ -95,6 +249,10 @@ def run_all() -> list[dict[str, Any]]:
         run["pass"] = ok
         run["fail_reason"] = why
         results.append(run)
+    # Live-bench scenarios — Plan-2 / Task 9. These need real ORM seed +
+    # assert and so cannot be expressed in the declarative SCENARIOS list.
+    results.append(_scenario_cancel_live())
+    results.append(_scenario_schedule_run_now_live())
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT.write_text(json.dumps(results, indent=2, default=str))
     return results

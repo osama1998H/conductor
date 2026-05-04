@@ -45,3 +45,15 @@ def test_evaluate_case_insensitive_match():
     expected = {"exit": 0, "stdout_contains": ["OK"]}
     ok, why = _evaluate(observed, expected)
     assert ok is True
+
+
+def test_live_scenario_helpers_exist():
+    """Plan-2 Task 9 added two live-bench scenarios. Pin their existence
+    so future refactors don't quietly drop them. The actual subprocess
+    runs are exercised manually via `python -m tests.v2_certification.cli_runner`."""
+    from tests.v2_certification.cli_runner import (
+        _scenario_cancel_live,
+        _scenario_schedule_run_now_live,
+    )
+    assert callable(_scenario_cancel_live)
+    assert callable(_scenario_schedule_run_now_live)

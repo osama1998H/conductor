@@ -3,7 +3,7 @@
 **Captured:** 2026-05-04, against `frappe.localhost` site.
 **Mechanism:** `tests/v2_certification/cli_runner.py` invokes each `bench conductor` subcommand via subprocess, evaluates exit code + stdout fragments.
 
-**Summary:** 7/7 pass on the automated runner.
+**Summary:** 9/9 pass on the automated runner.
 
 ## Automated scenarios
 
@@ -16,6 +16,8 @@
 | dlq list | `bench --site frappe.localhost conductor dlq list` | 0 | ✓ | inherits --site from bench context as of M7 fix |
 | workflow list | `bench --site frappe.localhost conductor workflow list` | 0 | ✓ |  |
 | migrate-from-rq dry-run | `bench --site frappe.localhost conductor migrate-from-rq --site frappe.localhost` | 0 | ✓ |  |
+| cancel | `bench --site frappe.localhost conductor cancel <jid>` | 0 | ✓ | live; CANCELLED status confirmed via Conductor Job row |
+| schedule run-now | `bench --site frappe.localhost conductor schedule run-now v2cert-schedule-run-now` | 0 | ✓ | live; SUCCEEDED Conductor Job created within 10s |
 
 ## Long-lived commands (manually verified live)
 
@@ -29,8 +31,8 @@
 | Command | Status |
 |---|---|
 | `bench --site frappe.localhost conductor dlq list --site frappe.localhost` | Pass when invoked with explicit `--site`. See Finding 1 below for the inheritance bug. |
-| `bench --site frappe.localhost conductor cancel <id>` | Not exercised in this run (requires a running job id). Marked open; safe to defer to M7. |
-| `bench --site frappe.localhost conductor schedule run-now <name>` | Not exercised in this run (requires a Conductor Schedule row). Marked open; safe to defer to M7. |
+| `bench --site frappe.localhost conductor cancel <id>` | Moved to automated coverage in Plan-2 Task 9 — see Automated scenarios table above. |
+| `bench --site frappe.localhost conductor schedule run-now <name>` | Moved to automated coverage in Plan-2 Task 9 — see Automated scenarios table above. |
 
 ## Findings
 
