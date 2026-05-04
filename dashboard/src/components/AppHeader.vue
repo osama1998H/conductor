@@ -9,7 +9,8 @@
         </BreadcrumbItem>
       </BreadcrumbList>
     </Breadcrumb>
-    <div class="ml-auto">
+    <div class="ml-auto flex items-center gap-3">
+      <HealthDot />
       <ModeToggle />
     </div>
   </header>
@@ -27,6 +28,7 @@ import {
   BreadcrumbPage,
 } from "@/components/ui/breadcrumb";
 import ModeToggle from "@/components/ModeToggle.vue";
+import HealthDot from "@/components/HealthDot.vue";
 import { findNavTitle } from "@/lib/nav";
 
 const route = useRoute();
