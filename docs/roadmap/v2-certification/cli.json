@@ -1,0 +1,113 @@
+[
+  {
+    "label": "doctor",
+    "argv": [
+      "bench",
+      "--site",
+      "frappe.localhost",
+      "conductor",
+      "doctor"
+    ],
+    "exit": 0,
+    "stdout": "[1/6] Redis connectivity.............................................. \u001b[32mOK\u001b[0m  (redis://127.0.0.1:11000/2)\n[2/6] Default queues seeded........................................... \u001b[32mOK\u001b[0m  (critical, default, kpi-conductor, long, short, workflow)\n[3/6] Consumer groups exist........................................... \u001b[32mOK\u001b[0m  (groups created/verified)\n[4/6] XADD/XREADGROUP/XACK round-trip................................. \u001b[32mOK\u001b[0m  (round-trip OK)\n\n\u001b[32mAll checks passed. Conductor is healthy.\u001b[0m\n",
+    "stderr": "",
+    "pass": true,
+    "fail_reason": ""
+  },
+  {
+    "label": "doctor --demo",
+    "argv": [
+      "bench",
+      "--site",
+      "frappe.localhost",
+      "conductor",
+      "doctor",
+      "--demo"
+    ],
+    "exit": 0,
+    "stdout": "[1/6] Redis connectivity.............................................. \u001b[32mOK\u001b[0m  (redis://127.0.0.1:11000/2)\n[2/6] Default queues seeded........................................... \u001b[32mOK\u001b[0m  (critical, default, kpi-conductor, long, short, workflow)\n[3/6] Consumer groups exist........................................... \u001b[32mOK\u001b[0m  (groups created/verified)\n[4/6] XADD/XREADGROUP/XACK round-trip................................. \u001b[32mOK\u001b[0m  (round-trip OK)\n2026-05-04 11:41:15 [info     ] job_enqueued                   job_id=18ee0a29-f899-4234-9a22-10857f011047 method=conductor.demo.echo queue=default\n[5/6] End-to-end demo dispatch (conductor.demo.echo).................. \u001b[32mOK\u001b[0m  (job_id=18ee0a29-f899-4234-9a22-10857f011047 succeeded)\n2026-05-04 11:41:17 [info     ] job_enqueued                   job_id=b2a36f52-041a-4d4f-90c2-64d2d9b7fb57 method=frappe.model.delete_doc.delete_dynamic_links queue=default\n[6/6] Result round-trip............................................... \u001b[32mOK\u001b[0m  (round-trip preserved)\n\n\u001b[32mAll checks passed. Conductor is healthy.\u001b[0m\n",
+    "stderr": "",
+    "pass": true,
+    "fail_reason": ""
+  },
+  {
+    "label": "depth",
+    "argv": [
+      "bench",
+      "--site",
+      "frappe.localhost",
+      "conductor",
+      "depth"
+    ],
+    "exit": 0,
+    "stdout": "site: frappe.localhost\nqueue          stream    dlq       scheduled  inflight  max_rps   max_concurrent\n-------------  --------  --------  ---------  --------  --------  --------------\ncritical       12        0         0          0         0         0             \ndefault        9189      7         0          0         0         0             \nkpi-conductor  150       50        0          0         0         0             \nlong           252       0         0          0         0         0             \nshort          12        0         0          0         0         0             \nworkflow       25        0         0          0         0         0             \n\n",
+    "stderr": "",
+    "pass": true,
+    "fail_reason": ""
+  },
+  {
+    "label": "schedule list",
+    "argv": [
+      "bench",
+      "--site",
+      "frappe.localhost",
+      "conductor",
+      "schedule",
+      "list"
+    ],
+    "exit": 0,
+    "stdout": "NAME                     EN CRON             TZ                 NEXT_RUN                  LAST_STATUS\ndemo-heartbeat            1 * * * * *        UTC                2026-05-04 08:42:00       DISPATCHED\ndemo-hourly-report        1 0 * * * *        UTC                2026-05-04 09:00:00       DISPATCHED\ndemo-nightly-cleanup      0 0 2 * * *        UTC                                          \nrn-test                   1 0 0 1 1 *        UTC                2027-01-01 00:00:00       DISPATCHED\n",
+    "stderr": "",
+    "pass": true,
+    "fail_reason": ""
+  },
+  {
+    "label": "dlq list",
+    "argv": [
+      "bench",
+      "--site",
+      "frappe.localhost",
+      "conductor",
+      "dlq",
+      "list"
+    ],
+    "exit": 2,
+    "stdout": "",
+    "stderr": "Usage: bench  conductor dlq list [OPTIONS]\nTry 'bench  conductor dlq list --help' for help.\n\nError: Missing option '--site'.\n",
+    "pass": false,
+    "fail_reason": "exit 2 != 0"
+  },
+  {
+    "label": "workflow list",
+    "argv": [
+      "bench",
+      "--site",
+      "frappe.localhost",
+      "conductor",
+      "workflow",
+      "list"
+    ],
+    "exit": 0,
+    "stdout": "NAME                             V   EN LAST_BUMP                \nDemoCompensatingDiamond            1  1                          \nDemoDiamond                        1  1                          \nTestFlowForStep                    1  1                          \n",
+    "stderr": "",
+    "pass": true,
+    "fail_reason": ""
+  },
+  {
+    "label": "migrate-from-rq dry-run",
+    "argv": [
+      "bench",
+      "--site",
+      "frappe.localhost",
+      "conductor",
+      "migrate-from-rq",
+      "--site",
+      "frappe.localhost"
+    ],
+    "exit": 0,
+    "stdout": "\n=== DRY RUN report \u2014 site frappe.localhost ===\n  plan rows           : 20\n  skipped (other site): 0\n  skipped (callable)  : 2\n  failed              : 0\n\nFirst 5 plan rows:\n  {'rq_job_id': 'frappe.localhost::scheduled_job::frappe.monitor.flush', 'rq_queue': 'default', 'method': 'frappe.core.doctype.scheduled_job_type.scheduled_job_type.run_scheduled_job', 'target_queue': 'default'}\n  {'rq_job_id': 'frappe.localhost::scheduled_job::frappe.email.queue.retry_sending_emails', 'rq_queue': 'default', 'method': 'frappe.core.doctype.scheduled_job_type.scheduled_job_type.run_scheduled_job', 'target_queue': 'default'}\n  {'rq_job_id': 'frappe.localhost::scheduled_job::frappe.integrations.doctype.google_calendar.google_calendar.sync', 'rq_queue': 'default', 'method': 'frappe.core.doctype.scheduled_job_type.scheduled_job_type.run_scheduled_job', 'target_queue': 'default'}\n  {'rq_job_id': 'frappe.localhost::scheduled_job::hrms.hr.doctype.interview.interview.send_interview_reminder', 'rq_queue': 'default', 'method': 'frappe.core.doctype.scheduled_job_type.scheduled_job_type.run_scheduled_job', 'target_queue': 'default'}\n  {'rq_job_id': 'frappe.localhost::scheduled_job::frappe.email.doctype.email_account.email_account.pull', 'rq_queue': 'default', 'method': 'frappe.core.doctype.scheduled_job_type.scheduled_job_type.run_scheduled_job', 'target_queue': 'default'}\n\nRe-run with --commit to apply.\n",
+    "stderr": "",
+    "pass": true,
+    "fail_reason": ""
+  }
+]
