@@ -186,18 +186,27 @@ age cell rendered `[role="tooltip"]` with `tooltipCount === 1` and
 `tooltipText === "2026-05-04 17:59:35.480183"` — exact ISO timestamp
 from Frappe's UTC-naive serialisation.
 
-### Finding D6 — No JsonViewer expansion on workflow step row click (Scenario 25)
+### Finding D6 — No JsonViewer expansion on workflow step row click — DEFERRED to v2.1
 
 Catalog says clicking a step row should expand a JsonViewer with the
 step's args/output payload. No expansion occurs. The step row data is
 visible (Step / Type / Status / Started / Finished / Job), but per-step
 input/output is not surfaced anywhere on the workflow detail page.
 
-This is a real gap for operator triage of workflow failures — without
-it, the operator must navigate to each step's `Job` link separately
-to read what was passed in. Plan-3 should either add the inline
-expansion or document the click-through-to-Job pattern as the intended
-flow.
+This is feature work, not a bug fix. The click-through-to-Job pattern
+already works (each step row links its `Job` cell to the Conductor
+Job detail panel, where args/kwargs are visible in the Args tab —
+verified in Plan-2 Scenario 9). Deferring inline expansion to v2.1
+because designing it raises questions beyond the v2.0.0 release scope:
+
+- inline expansion vs modal vs route navigation?
+- the data source — `Conductor Job.args/kwargs` (raw) or workflow
+  context (post-merge)?
+- msgpack pretty-printing or JSON mirror?
+- what happens on a 50KB args payload?
+
+Operators currently click through to the linked Job to see args/output
+— slower but correct. Tracked in `docs/roadmap/v2.md` v2.1 backlog.
 
 ### Finding D7 — Schedules / DLQ / Feed: Switch/Checkbox prop name mismatch — FIXED in Plan-3 Phase B
 
