@@ -52,9 +52,8 @@ def _step(label: str, fn: Callable[[], str]) -> bool:
 
 def _fetch_fresh_workers() -> list[dict]:
     """Return Conductor Worker rows whose `last_heartbeat` is within the
-    freshness window. Each row carries `queues` as the raw JSON string from
-    the underlying Long Text field plus a `stale` boolean for tests that
-    want to inject staleness without seeding wall-clock data.
+    freshness window. Each row carries `name` plus the raw `queues` JSON
+    string from the underlying Long Text field.
 
     `last_heartbeat` is written as UTC-naive by `conductor.worker._now_naive`,
     so the threshold is computed in the same timezone. Using `datetime.now()`
@@ -70,7 +69,7 @@ def _fetch_fresh_workers() -> list[dict]:
         filters={"last_heartbeat": [">=", threshold]},
         order_by="last_heartbeat desc",
     )
-    return [{"name": r["name"], "queues": r["queues"], "stale": False} for r in rows]
+    return [{"name": r["name"], "queues": r["queues"]} for r in rows]
 
 
 def _parse_queues(field_value: str) -> set[str]:
@@ -92,31 +91,33 @@ def check_takeover_queue_coverage(
     *,
     takeover_enabled: bool,
     queue_map: dict[str, str],
+    fresh_workers: list[dict],
 ) -> CheckResult:
     """Verify every queue the takeover loop dispatches to has at least one
     heartbeat-fresh worker listening. No-op when the takeover flag is unset.
 
-    Pure function: takes the activation flag and the merged queue-map as
-    arguments so unit tests can exercise it without seeding site config."""
+    Pure: takes `takeover_enabled`, the merged `queue_map`, and the already-
+    fetched `fresh_workers` list. Callers handle the ORM read separately
+    (see `_fetch_fresh_workers`); this function does no I/O."""
     if not takeover_enabled:
         return CheckResult(ok=True, detail="takeover disabled — skipped")
 
     required_queues = set(queue_map.values()) or {"default"}
-    fresh = [w for w in _fetch_fresh_workers() if not w.get("stale")]
     covered: set[str] = set()
-    for w in fresh:
+    for w in fresh_workers:
         covered |= _parse_queues(w.get("queues") or "")
 
     missing = required_queues - covered
     if missing:
         missing_csv = ", ".join(sorted(missing))
         covered_csv = ", ".join(sorted(covered)) or "none"
+        missing_flags = " ".join(f"--queue {q}" for q in sorted(missing))
         return CheckResult(
             ok=False,
             detail=(
                 f"takeover dispatches to {{{', '.join(sorted(required_queues))}}} but "
                 f"workers cover {{{covered_csv}}} — uncovered: {missing_csv}. "
-                f"Add `--queue {missing_csv}` to a `bench conductor worker` Procfile entry."
+                f"Add `{missing_flags}` to a `bench conductor worker` Procfile entry."
             ),
         )
     return CheckResult(
@@ -170,8 +171,11 @@ def run(*, demo: bool = False) -> int:
         takeover_enabled = bool(conf.get(ACTIVATION_FLAG, False))
         merged = dict(DEFAULT_QUEUE_MAP)
         merged.update(conf.get(QUEUE_MAP_KEY) or {})
+        fresh = _fetch_fresh_workers() if takeover_enabled else []
         result = check_takeover_queue_coverage(
-            takeover_enabled=takeover_enabled, queue_map=merged,
+            takeover_enabled=takeover_enabled,
+            queue_map=merged,
+            fresh_workers=fresh,
         )
         if not result.ok:
             raise RuntimeError(result.detail)
