@@ -180,3 +180,15 @@ def test_is_takeover_enabled_returns_false_when_conf_access_raises():
         lambda self: (_ for _ in ()).throw(RuntimeError("conf gone"))
     )
     assert fsl._is_takeover_enabled(fake_frappe) is False
+
+
+def test_fire_one_writes_last_execution_utc_naive():
+    """last_execution is read by the dashboard's `Last run` columns and
+    by Frappe's own is_event_due() for cron math. Storing it local-naive
+    while the rest of conductor stores UTC-naive creates display drift
+    on non-UTC benches."""
+    import inspect
+    from conductor import frappe_scheduled_loop
+    src = inspect.getsource(frappe_scheduled_loop._fire_one)
+    assert "datetime.now()" not in src
+    assert "now_naive" in src

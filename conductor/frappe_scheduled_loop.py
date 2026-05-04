@@ -25,6 +25,7 @@ from typing import Any
 
 from conductor.dispatcher import enqueue as conductor_enqueue
 from conductor.logging import get_logger
+from conductor.worker import now_naive
 
 log = get_logger("conductor.frappe_scheduled_loop")
 
@@ -92,7 +93,7 @@ def _fire_one(name: str, frappe) -> None:
         )
         return
 
-    doc.db_set("last_execution", datetime.now().replace(tzinfo=None), update_modified=False)
+    doc.db_set("last_execution", now_naive(), update_modified=False)
 
 
 def _frappe_scheduled_loop_iter(frappe) -> int:
