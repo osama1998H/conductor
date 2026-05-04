@@ -181,7 +181,7 @@ count stayed 0. `<TooltipTrigger as-child>` was already wired correctly.
 Also added `cursor-help` to the trigger span and `<code class="text-xs">`
 around the timestamp in `<TooltipContent>`.
 
-Live smoke (Plan-3 Phase B, commit `<HASH-D5>`): hovering the first HB
+Live smoke (Plan-3 Phase B, commit `d29ca80`): hovering the first HB
 age cell rendered `[role="tooltip"]` with `tooltipCount === 1` and
 `tooltipText === "2026-05-04 17:59:35.480183"` — exact ISO timestamp
 from Frappe's UTC-naive serialisation.
