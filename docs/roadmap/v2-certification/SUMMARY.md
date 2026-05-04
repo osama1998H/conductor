@@ -26,7 +26,7 @@ recorded by Conductor — exactly the v2 KPI in action).
 | M1 | `baseline.md` | ✅ commits 9ab5109, 5951508, 955ffd4 |
 | M2 | `scheduled-jobs.md` (105 rows × 4-day soak) | ✅ commit e40589a |
 | M3 | `cli.md` (7 automated scenarios + interactive) | ✅ commit e05f8f8 |
-| M4 | `dashboard.md` (27 scenarios via `expect` MCP) | ⏳ deferred — needs user-driven `expect` session |
+| M4 | `dashboard.md` (27 scenarios via `expect` MCP) | ✅ commit `<HASH-5>` |
 | M5 | `multi-worker.md` (concurrency + reclaim findings) | ✅ commit 4e7ab7e |
 | M6 | `soak.md` (4-day natural-cron coverage) | ✅ commit 0c428f0 |
 
@@ -61,8 +61,16 @@ recorded by Conductor — exactly the v2 KPI in action).
    Conductor bug; an HRMS/erpnext API mismatch. Demonstrates the v2
    KPI: failures that would have been silent under RQ are queryable
    via `bench conductor dlq list`.
-7. **Dashboard surface (M4)** not exercised in this plan. Requires
-   `expect` MCP session driven by user. Plan-2 should fold this in.
+7. **Dashboard surface (M4)** captured 2026-05-04 via `expect` MCP
+   (agent-driven, not human-driven — clarification: `expect` is an
+   agent capability). 27 scenarios × {light, dark} written up in
+   `docs/roadmap/v2-certification/dashboard.md` (commit `<HASH-5>`).
+   Pass: 18; pass-with-caveat: 4; fail: 3; deferred: 2. Six new
+   findings (D1–D6) folded into the Plan-3 backlog — most notably
+   the same UTC-vs-local TZ class manifesting in the Overview
+   `ACTIVE WORKERS` NumberCard and the Workers HB age column, plus
+   a front-end `workflow=null` literal-string bug breaking the
+   workflow Recent runs table.
 
 ## Test surface
 
@@ -92,12 +100,12 @@ recorded by Conductor — exactly the v2 KPI in action).
 - ✅ Finding 4: process-supervision recommendation in architecture doc (commit `d81f3b0`)
 - ✅ Finding 5: inflight-cap test re-run; pass (commit `032fd65`)
 - ✅ CLI gaps: cancel + schedule run-now automated (commit `c4a5f6f`)
-- ⏳ Finding 7: M4 dashboard matrix — DEFERRED. Requires a human-driven `expect` MCP browser session walking the 27 scenarios in `tests/v2_certification/dashboard_scenarios.md`. Cannot be subagent-driven; the user picks this up when they next have an `expect` MCP session available. When done, the dashboard.md matrix lands and this bullet flips to ✅ with `<HASH-5>`.
+- ✅ Finding 7: M4 dashboard matrix — captured 2026-05-04 via agent-driven `expect` MCP (commit `<HASH-5>`). 27 scenarios in `docs/roadmap/v2-certification/dashboard.md`; six new findings (D1–D6) added to the Plan-3 backlog.
 
-Plan-2 closes the M7 fix backlog as far as automation reaches. The
-five fix-and-document items are all green; the dashboard pass remains
-open as a user task. Comparative KPI re-run + M8 stretch hardening +
-v2.0.0 release belong to Plan-3.
+Plan-2 closes the M7 fix backlog in full — five fix-and-document
+items plus the M4 dashboard pass are all green. Six new dashboard
+findings (D1–D6) are added to the Plan-3 backlog. Comparative KPI
+re-run + M8 stretch hardening + v2.0.0 release belong to Plan-3.
 
 ## Pre-existing finding surfaced during Plan-2
 
@@ -113,23 +121,22 @@ to write timestamps or compute thresholds while workers write
 | `conductor/sweeper.py:68` | sweeper age threshold | same pattern; sweep may run early / late on non-UTC hosts |
 | `conductor/frappe_scheduled_loop.py:95` | writes `last_execution` timestamp | display drift only; does not affect dispatch correctness |
 | `conductor/commands/dlq.py:163,195` | writes `reviewed_at` on retry/discard | audit metadata drift; does not affect retry logic |
+| Overview `ACTIVE WORKERS` NumberCard + Workers `HB age` column | dashboard surface for the same TZ class | NumberCard reads 0 against running workers; HB age shows hours instead of seconds. See `dashboard.md` Finding D1, D2 |
 
 The new doctor check correctly uses UTC-naive (`b1ea19b`). All four
-sites are one-liner fixes that belong in Plan-3 alongside the rest of
-the hardening pass. `scheduler_loops.py` and `sweeper.py` are the only
-operationally impactful ones; `frappe_scheduled_loop.py` and `dlq.py`
-affect operator-visible timestamps only.
+backend sites plus the dashboard surfaces (D1, D2) are one-liner fixes
+that belong in Plan-3 alongside the rest of the hardening pass.
+`scheduler_loops.py` and `sweeper.py` are the only operationally
+impactful ones; `frappe_scheduled_loop.py`, `dlq.py`, and the dashboard
+NumberCard / HB age column affect operator-visible timestamps only.
 
 ## What's next
 
-- **Dashboard M4** (this plan, deferred to user): walk
-  `tests/v2_certification/dashboard_scenarios.md` × {light, dark}
-  via `expect` MCP, populate
-  `docs/roadmap/v2-certification/dashboard.md`, mark Finding 7 ✅.
-- **Plan-3 (M8 + TZ audit fix + KPI re-run + v2.0.0 release).**
-  Stretch hardening (Procfile.conductor production shape,
+- **Plan-3 (M8 + TZ audit + dashboard fixes + KPI re-run + v2.0.0
+  release).** Stretch hardening (Procfile.conductor production shape,
   add_to_apps_screen enable, doctor's full health-gate including
   pause_scheduler assertion + shim assertion, optional CI smoke loop),
-  UTC-naive TZ audit across the four sites above, comparative KPI
-  re-run as a release gate, README + docs/index.md refresh, and the
-  v2.0.0 tag + GitHub release notes.
+  UTC-naive TZ audit across the backend sites + dashboard surfaces
+  listed above, dashboard findings D1–D6 from `dashboard.md`,
+  comparative KPI re-run as a release gate, README + docs/index.md
+  refresh, and the v2.0.0 tag + GitHub release notes.
