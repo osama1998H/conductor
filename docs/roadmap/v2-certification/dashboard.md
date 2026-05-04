@@ -143,7 +143,7 @@ Root cause: two compounding issues:
    bar became reachable, but was still easy to miss when the table was
    tall.
 
-**Fixed in commit `<HASH-D4>`.**
+**Fixed in commit `e03762e`.**
 
 Backend (`conductor/api/dashboard.py`): hardened `dlq_retry` and
 `dlq_discard` to return `{retried, failed}` / `{discarded, failed}`
