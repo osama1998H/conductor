@@ -99,26 +99,32 @@ so JS treats it as UTC.
 ALIVE workers; minutes/hours for the stale GONE rows as expected.
 See `dashboard-screenshots/post-A-workers.png`.
 
-### Finding D3 — `workflows.list_runs` receives `workflow="null"` literal
+### Finding D3 — `workflows.list_runs` receives `workflow="null"` literal — FIXED in Plan-3 Phase B
 
-The dashboard's Workflows page calls
-`/api/method/conductor.api.workflows.list_runs?workflow=null&limit=50`.
-The backend signature is `list_runs(workflow: Optional[str] = None, ...)`
-and applies `filters["workflow"] = workflow` whenever the value is
-truthy. The literal string `"null"` is truthy, so the SQL filter ends
-up `workflow = "null"` — which matches no rows. Result: the Recent runs
-table is permanently empty regardless of how many runs exist.
+The dashboard's Workflows page used to call
+`/api/method/conductor.api.workflows.list_runs?workflow=null&limit=50`,
+where JS `null` was serialized as the literal string `"null"`. The
+backend's `if workflow:` filter saw `"null"` (truthy) and queried
+`workflow = "null"`, matching no rows. Recent runs table was always
+empty regardless of how many workflow runs existed in the DB.
 
-Fix candidates:
-- Front-end: omit the `workflow` query parameter entirely when no
-  workflow is selected (don't serialize JS `null` as the string `"null"`).
-- Back-end: treat string values `"null"` and `"undefined"` as `None` in
-  `list_runs`. Defensive but masks the front-end bug.
+**Fixed (commit <HASH-D3> — fill in commit SHA after commit):**
 
-The recommended fix is the front-end one. Add a regression test to
-`conductor/api/workflows.py` that verifies `list_runs(workflow="null")`
-returns empty (current broken behavior pinned) and a sibling test
-that explicit `None` returns all runs.
+- Frontend: `dashboard/src/api.js:listWorkflowRuns` no longer passes JS
+  null/undefined into the query string. The workflow / status / offset
+  parameters are omitted when nullish; only `limit` is always included.
+- Backend: `conductor/api/workflows.list_runs` treats `"null"`,
+  `"undefined"`, `"none"`, and empty-string as no filter via a small
+  `_is_nullish` helper. Belt-and-suspenders against future serialization
+  mishaps from any client. Three regression tests pin this behavior in
+  `tests/test_workflows_api.py`:
+  - `workflow="null"` → filter omitted
+  - `workflow="undefined"`, `status="undefined"` → both filters omitted
+  - `workflow="DemoDiamond"` → real value passes through
+
+Live smoke: `bench execute conductor.api.workflows.list_runs` returns 10
+DemoDiamond/DemoCompensatingDiamond runs; the Workflows page's Recent
+runs table populates correctly.
 
 ### Finding D4 — DLQ has no bulk-action surface
 
