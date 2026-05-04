@@ -101,16 +101,24 @@ v2.0.0 release belong to Plan-3.
 
 ## Pre-existing finding surfaced during Plan-2
 
-Plan-2 Tasks 4+5 surfaced an existing TZ inconsistency in
-`conductor/scheduler_loops.py:152` — the reaper computes its
-heartbeat-age threshold via `datetime.now()` (local-naive) while
-workers write `last_heartbeat` via `_now_naive()` (UTC-naive). The
-reaper has been incorrectly marking workers GONE on any non-UTC
-bench, but the workers re-assert `status='ALIVE'` every heartbeat,
-which races the reaper's mark and masks the bug in production. The
-new doctor check correctly uses UTC-naive (`b1ea19b`); the reaper
-fix is a one-liner that belongs in Plan-3 alongside the rest of the
-hardening pass.
+Plan-2 Tasks 4+5 surfaced a broader TZ inconsistency across the
+codebase: four production call sites use `datetime.now()` (local-naive)
+to write timestamps or compute thresholds while workers write
+`last_heartbeat` via `_now_naive()` (UTC-naive via
+`datetime.now(timezone.utc).replace(tzinfo=None)`):
+
+| Location | Usage | Risk |
+|---|---|---|
+| `conductor/scheduler_loops.py:152` | reaper heartbeat-age threshold | marks workers GONE on any non-UTC bench; masked by worker re-asserting ALIVE each heartbeat |
+| `conductor/sweeper.py:68` | sweeper age threshold | same pattern; sweep may run early / late on non-UTC hosts |
+| `conductor/frappe_scheduled_loop.py:95` | writes `last_execution` timestamp | display drift only; does not affect dispatch correctness |
+| `conductor/commands/dlq.py:163,195` | writes `reviewed_at` on retry/discard | audit metadata drift; does not affect retry logic |
+
+The new doctor check correctly uses UTC-naive (`b1ea19b`). All four
+sites are one-liner fixes that belong in Plan-3 alongside the rest of
+the hardening pass. `scheduler_loops.py` and `sweeper.py` are the only
+operationally impactful ones; `frappe_scheduled_loop.py` and `dlq.py`
+affect operator-visible timestamps only.
 
 ## What's next
 
@@ -118,10 +126,10 @@ hardening pass.
   `tests/v2_certification/dashboard_scenarios.md` × {light, dark}
   via `expect` MCP, populate
   `docs/roadmap/v2-certification/dashboard.md`, mark Finding 7 ✅.
-- **Plan-3 (M8 + reaper TZ fix + KPI re-run + v2.0.0 release).**
+- **Plan-3 (M8 + TZ audit fix + KPI re-run + v2.0.0 release).**
   Stretch hardening (Procfile.conductor production shape,
   add_to_apps_screen enable, doctor's full health-gate including
   pause_scheduler assertion + shim assertion, optional CI smoke loop),
-  reaper TZ fix surfaced above, comparative KPI re-run as a release
-  gate, README + docs/index.md refresh, and the v2.0.0 tag + GitHub
-  release notes.
+  UTC-naive TZ audit across the four sites above, comparative KPI
+  re-run as a release gate, README + docs/index.md refresh, and the
+  v2.0.0 tag + GitHub release notes.
