@@ -43,8 +43,8 @@
           >
             <TableCell @click.stop>
               <Checkbox
-                :checked="selected.has(row.original.name)"
-                @update:checked="$emit('toggle-select', row.original.name)"
+                :model-value="selected.has(row.original.name)"
+                @update:model-value="$emit('toggle-select', row.original.name)"
               />
             </TableCell>
             <TableCell

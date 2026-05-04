@@ -12,17 +12,27 @@
         @filters-change="onFiltersChange"
       />
 
-      <Card v-if="selected.size > 0" class="p-3">
-        <div class="flex gap-2 items-center text-sm">
-          <span>{{ selected.size }} selected</span>
-          <Button size="sm" :disabled="!isOperator" @click="onRetry">Retry</Button>
-          <Button v-if="isSysMgr" size="sm" variant="destructive" @click="onDiscard">Discard</Button>
+      <!-- Sticky bulk-action bar; only renders when ≥1 row is selected. -->
+      <div
+        v-if="selected.size > 0"
+        class="sticky bottom-0 z-10 -mx-4 mt-2 flex items-center justify-between gap-4 border-t bg-card px-4 py-3 shadow-md"
+      >
+        <span class="text-sm text-muted-foreground">
+          {{ selected.size }} {{ selected.size === 1 ? 'entry' : 'entries' }} selected
+        </span>
+        <div class="flex items-center gap-2">
+          <Button size="sm" variant="ghost" @click="clearSelection">Clear</Button>
           <Button v-if="isSysMgr && selected.size === 1 && currentSafe" size="sm" variant="outline" @click="onOpenEdit">
             Edit &amp; retry…
           </Button>
-          <Button size="sm" variant="ghost" @click="clearSelection">Clear</Button>
+          <Button size="sm" :disabled="!isOperator || bulkBusy" @click="onRetry">
+            Retry ({{ selected.size }})
+          </Button>
+          <Button v-if="isSysMgr" size="sm" variant="destructive" :disabled="bulkBusy" @click="onDiscard">
+            Discard ({{ selected.size }})
+          </Button>
         </div>
-      </Card>
+      </div>
     </div>
 
     <div v-if="entry_name" class="flex-1 min-w-0 overflow-auto">
@@ -119,6 +129,7 @@ const rows = ref([]);
 const selected = ref(new Set());
 const detailEntry = ref(null);
 const editing = ref(null);
+const bulkBusy = ref(false);
 
 const { isOperator, isSysMgr } = useUserRoles();
 
@@ -168,12 +179,20 @@ async function onRetry() {
   const names = [...selected.value];
   if (!(await confirm(`Retry ${names.length} ${names.length === 1 ? "entry" : "entries"} as-is?`,
                        { title: "Retry DLQ entries", confirmText: "Retry" }))) return;
+  bulkBusy.value = true;
   try {
-    await api.dlqRetry(names);
-    toast(`${names.length} ${names.length === 1 ? "entry" : "entries"} retried`, "success");
+    const result = await api.dlqRetry(names);
+    const { retried = names.length, failed = 0 } = result || {};
+    if (failed > 0) {
+      toast(`Retried ${retried}; ${failed} could not be retried`, "warning");
+    } else {
+      toast(`${retried} ${retried === 1 ? "entry" : "entries"} retried`, "success");
+    }
   } catch (e) {
     toast(`Retry failed: ${e.message}`, "error");
     return;
+  } finally {
+    bulkBusy.value = false;
   }
   clearSelection();
   reload();
@@ -184,12 +203,20 @@ async function onDiscard() {
   const names = [...selected.value];
   if (!(await confirm(`Discard ${names.length} ${names.length === 1 ? "entry" : "entries"}? This cannot be undone.`,
                        { title: "Discard DLQ entries", confirmText: "Discard", danger: true }))) return;
+  bulkBusy.value = true;
   try {
-    await api.dlqDiscard(names);
-    toast(`${names.length} ${names.length === 1 ? "entry" : "entries"} discarded`, "success");
+    const result = await api.dlqDiscard(names);
+    const { discarded = names.length, failed = 0 } = result || {};
+    if (failed > 0) {
+      toast(`Discarded ${discarded}; ${failed} could not be discarded`, "warning");
+    } else {
+      toast(`${discarded} ${discarded === 1 ? "entry" : "entries"} discarded`, "success");
+    }
   } catch (e) {
     toast(`Discard failed: ${e.message}`, "error");
     return;
+  } finally {
+    bulkBusy.value = false;
   }
   clearSelection();
   reload();

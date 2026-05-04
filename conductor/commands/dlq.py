@@ -1,6 +1,5 @@
 """bench conductor dlq {list,retry,discard} — operational subcommands over
-Conductor DLQ Entry rows. retry/discard live here too but are added in
-Task 14."""
+Conductor DLQ Entry rows."""
 
 from __future__ import annotations
 
@@ -9,8 +8,10 @@ from datetime import datetime
 
 import click
 import frappe
+from frappe.commands import get_site, pass_context
 
 from conductor.serialization import loads as msgpack_loads
+from conductor.worker import now_naive
 
 
 def _connect_to_site(site: str) -> None:
@@ -40,14 +41,17 @@ def dlq_group():
 
 
 @dlq_group.command("list")
-@click.option("--site", required=True, help="Frappe site name.")
+@click.option("--site", default=None,
+              help="Frappe site name. Defaults to the bench --site context.")
 @click.option("--queue", default=None, help="Filter to one queue.")
 @click.option("--status", "status",
               type=click.Choice(["PENDING_REVIEW", "RETRIED", "DISCARDED"]),
               default=None, help="Filter by review status.")
 @click.option("--limit", default=50, type=int, help="Max rows to print.")
-def list_command(site, queue, status, limit):
+@pass_context
+def list_command(ctx, site, queue, status, limit):
     """List DLQ entries, newest first."""
+    site = site or get_site(ctx)
     filters: dict = {}
     if queue:
         filters["queue"] = queue
@@ -131,14 +135,17 @@ def _mark_dlq_row(name: str, payload: dict) -> None:
 
 
 @dlq_group.command("retry")
-@click.option("--site", required=True)
+@click.option("--site", default=None,
+              help="Frappe site name. Defaults to the bench --site context.")
 @click.option("--queue", default=None)
 @click.option("--limit", default=50, type=int)
 @click.option("--job", "job_id", default=None,
               help="Operate on this specific job_id only.")
-def retry_command(site, queue, limit, job_id):
+@pass_context
+def retry_command(ctx, site, queue, limit, job_id):
     """Re-enqueue PENDING_REVIEW DLQ entries via conductor.enqueue and mark
     each row RETRIED."""
+    site = site or get_site(ctx)
     filters = {"queue": queue} if queue else {}
     _connect_to_site(site)
     try:
@@ -154,7 +161,7 @@ def retry_command(site, queue, limit, job_id):
                 _mark_dlq_row(r["name"], {
                     "status": "RETRIED",
                     "reviewed_by": _get_actor(),
-                    "reviewed_at": datetime.now().replace(microsecond=0),
+                    "reviewed_at": now_naive().replace(microsecond=0),
                 })
                 moved += 1
                 click.echo(f"  retried {r['name']} (job {r['job']} -> {new_id})")
@@ -166,12 +173,15 @@ def retry_command(site, queue, limit, job_id):
 
 
 @dlq_group.command("discard")
-@click.option("--site", required=True)
+@click.option("--site", default=None,
+              help="Frappe site name. Defaults to the bench --site context.")
 @click.option("--queue", default=None)
 @click.option("--limit", default=50, type=int)
 @click.option("--job", "job_id", default=None)
-def discard_command(site, queue, limit, job_id):
+@pass_context
+def discard_command(ctx, site, queue, limit, job_id):
     """Mark PENDING_REVIEW DLQ entries DISCARDED without re-enqueuing."""
+    site = site or get_site(ctx)
     filters = {"queue": queue} if queue else {}
     _connect_to_site(site)
     try:
@@ -183,7 +193,7 @@ def discard_command(site, queue, limit, job_id):
             _mark_dlq_row(r["name"], {
                 "status": "DISCARDED",
                 "reviewed_by": _get_actor(),
-                "reviewed_at": datetime.now().replace(microsecond=0),
+                "reviewed_at": now_naive().replace(microsecond=0),
             })
             click.echo(f"  discarded {r['name']}")
         click.echo(f"\nDiscarded {len(rows)} entries.")

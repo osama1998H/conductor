@@ -21,12 +21,12 @@ Two paths, depending on whether you are at the dashboard or in a terminal.
 **CLI path:**
 
 ```bash
-bench conductor dlq list --site SITE                # all queues
-bench conductor dlq list --site SITE --queue default
-bench conductor dlq list --site SITE --status PENDING_REVIEW --limit 100
+bench --site SITE conductor dlq list                            # all queues
+bench --site SITE conductor dlq list --queue default
+bench --site SITE conductor dlq list --status PENDING_REVIEW --limit 100
 ```
 
-Note: `dlq` takes `--site` as its own option (not bench's `--site`). See [`reference-cli.md`](reference-cli.md#dlq) for the full surface.
+`dlq` accepts `--site` as a flag too if you prefer to override the bench `--site` context — see [`reference-cli.md`](reference-cli.md#dlq) for the full surface.
 
 The CLI output shows: entry `name`, `job` id, `queue`, `moved_at`, `last_error_type`, `last_error_message`. Newest first; capped at `--limit` (default 50).
 
@@ -39,13 +39,13 @@ Retry re-enqueues the original payload via `conductor.enqueue` and marks the DLQ
 **One job at a time:**
 
 ```bash
-bench conductor dlq retry --site SITE --job <job_id>
+bench --site SITE conductor dlq retry --job <job_id>
 ```
 
 **Bulk by queue:**
 
 ```bash
-bench conductor dlq retry --site SITE --queue default --limit 50
+bench --site SITE conductor dlq retry --queue default --limit 50
 ```
 
 **From the dashboard:**
@@ -74,8 +74,8 @@ Discard marks a DLQ entry `DISCARDED` without re-enqueuing. The job will not run
 **CLI:**
 
 ```bash
-bench conductor dlq discard --site SITE --job <job_id>
-bench conductor dlq discard --site SITE --queue default --limit 20
+bench --site SITE conductor dlq discard --job <job_id>
+bench --site SITE conductor dlq discard --queue default --limit 20
 ```
 
 **Dashboard:**

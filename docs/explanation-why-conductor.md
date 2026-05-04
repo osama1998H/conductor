@@ -53,7 +53,7 @@ A KPI list with one honest "we couldn't prove this" entry is more credible than 
 
 - **Throughput is macOS-only.** RQ workers `fork()` per job. Darwin's `fork` is expensive; Linux production servers will likely show a smaller gap. Re-run KPI 5 on your target OS before any throughput-based decision.
 - **Single-worker numbers do not extrapolate to a fleet.** The dispatcher and Redis stay common; pool-mode workers and high-concurrency setups will hit other bottlenecks.
-- **Crash-survival was tested and dropped.** A sixth KPI — "Crash-Survival Rate" under worker SIGKILL with a peer alive — was investigated and **dropped because RQ matched Conductor**. RQ's `clean_registries` mechanism (called by the surviving peer on heartbeat expiry) recovers started-registry orphans automatically. The original investigation is preserved at [`tests/comparative/_dropped_crash_survival.py`](../tests/comparative/_dropped_crash_survival.py); the reasoning is in [the KPI plan, §3 + §7](superpowers/specs/2026-04-30-conductor-vs-rq-kpi-plan.md).
+- **Crash-survival was tested and dropped.** A sixth KPI — "Crash-Survival Rate" under worker SIGKILL with a peer alive — was investigated and **dropped because RQ matched Conductor**. RQ's `clean_registries` mechanism (called by the surviving peer on heartbeat expiry) recovers started-registry orphans automatically. The original investigation is preserved at [`tests/comparative/_dropped_crash_survival.py`](../tests/comparative/_dropped_crash_survival.py); the file's module docstring captures the reasoning.
 - **The KPIs do not measure ergonomics.** Workflow DAGs, edit-and-retry, and the dashboard are real Conductor advantages — but the KPI suite measures behavior under stress, not developer experience.
 
 ---

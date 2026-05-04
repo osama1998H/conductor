@@ -11,6 +11,19 @@ from typing import Any, Optional
 import frappe
 
 
+_NULLISH_STRINGS = frozenset(("null", "undefined", "none", ""))
+
+
+def _is_nullish(v: object) -> bool:
+    """True when a query parameter is JS-null-ish — None, empty string,
+    or one of the sentinel strings JS serializers commonly emit."""
+    if v is None:
+        return True
+    if isinstance(v, str) and v.strip().lower() in _NULLISH_STRINGS:
+        return True
+    return False
+
+
 def _require_read() -> None:
     if not (
         frappe.has_permission("Conductor Workflow", "read")
@@ -57,9 +70,9 @@ def list_runs(
 ) -> list[dict[str, Any]]:
     _require_read()
     filters: dict[str, Any] = {}
-    if workflow:
+    if not _is_nullish(workflow):
         filters["workflow"] = workflow
-    if status:
+    if not _is_nullish(status):
         filters["status"] = status
     rows = frappe.get_all(
         "Conductor Workflow Run",

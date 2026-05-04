@@ -27,6 +27,7 @@ import redis as redis_mod
 from conductor.logging import get_logger
 from conductor.messages import JobMessage, encode
 from conductor.streams import ensure_consumer_group, stream_key
+from conductor.worker import now_naive
 
 log = get_logger("conductor.sweeper")
 
@@ -65,7 +66,7 @@ def sweep_orphans(
     batch: int = SWEEP_BATCH,
 ) -> int:
     """One-pass sweep. Returns the number of orphans recovered."""
-    threshold = datetime.now() - timedelta(seconds=threshold_seconds)
+    threshold = now_naive() - timedelta(seconds=threshold_seconds)
     rows = frappe.db.sql(
         """
         SELECT job_id, queue, method, status, site, attempt, max_attempts, timeout_seconds,

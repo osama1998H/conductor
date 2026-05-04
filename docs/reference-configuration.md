@@ -32,6 +32,60 @@ All keys live under the `conductor` object in `sites/<site>/site_config.json`:
 
 ---
 
+## Bench-wide flags (`common_site_config.json`)
+
+Unlike the per-site `conductor.*` keys above, these flags live at the **top level** of `common_site_config.json` so they apply to every process the bench launches — workers, scheduler, `bench schedule`, `bench execute`, web request handlers. Keys are **not** nested under `conductor.*`.
+
+| Key | Type | Default | Reads at | Catches |
+|---|---|---|---|---|
+| `conductor_intercept_frappe_enqueue` | bool | `false` | every `frappe.enqueue` call | direct in-process callers |
+| `conductor_take_over_frappe_scheduler` | bool | `false` | every minute, on the scheduler | Frappe `Scheduled Job Type` rows |
+| `conductor_frappe_schedule_queue_map` | object | see below | every dispatch in the takeover loop | maps Frappe frequencies → Conductor queues |
+| `pause_scheduler` (Frappe-native) | bool | `false` | `bench schedule` startup | required pair when takeover is active |
+
+### `conductor_intercept_frappe_enqueue`
+
+When `true`, conductor monkey-patches `frappe.enqueue` at module load so in-process Python calls (`frappe.enqueue("foo")` from a controller, hook, or job) route through `conductor.enqueue`. The patch checks per call whether the current site has conductor installed; sites without conductor fall back to the original `frappe.enqueue` and stay on RQ.
+
+The HTTP `/api/method/frappe.enqueue` path is intercepted unconditionally via the `override_whitelisted_methods` block in conductor's own `hooks.py` — no setup required.
+
+This flag does **not** catch Frappe's `Scheduled Job Type` rows. Frappe's scheduler imports `enqueue` directly from `frappe.utils.background_jobs`, bypassing patched bindings. Use `conductor_take_over_frappe_scheduler` for those.
+
+Bootstrap failures (e.g., an unexpected value type) emit a `warning` via `frappe.logger("conductor")` and otherwise no-op — `frappe.enqueue` reverts to its original RQ behaviour and import never raises.
+
+### `conductor_take_over_frappe_scheduler`
+
+When `true`, `bench conductor scheduler` runs an extra loop that reads `tabScheduled Job Type` rows once per minute, asks each non-stopped row's `is_event_due()` (Frappe's own logic — Conductor does not reimplement it), and dispatches each due row through `conductor.enqueue` with `max_attempts=1`. After a successful dispatch the loop sets `last_execution` so the row does not re-trigger on the next tick.
+
+Pair with `pause_scheduler: 1` in the same `common_site_config.json`. Without it, Frappe's own scheduler also fires each row → silent double-execution. The `[6/9]` doctor check enforces this contract.
+
+How-to walkthrough: [`how-to-route-frappe-scheduled-jobs.md`](how-to-route-frappe-scheduled-jobs.md).
+
+### `conductor_frappe_schedule_queue_map`
+
+Object mapping Frappe `Scheduled Job Type.frequency` values to Conductor queue names. Per-key override only — keys you do not set keep the default below. Unknown frequency names fall back to `default`. Read on every dispatch, so you can edit and restart the scheduler to pick up changes.
+
+```json
+{
+  "All":                "default",
+  "Cron":               "default",
+  "Hourly":             "default",
+  "Hourly Long":        "default",
+  "Hourly Maintenance": "default",
+  "Daily":              "long",
+  "Daily Long":         "long",
+  "Daily Maintenance":  "long",
+  "Weekly":             "long",
+  "Weekly Long":        "long",
+  "Monthly":            "long",
+  "Monthly Long":       "long"
+}
+```
+
+A worker that consumes only `default` will leave daily / weekly / monthly rows queued indefinitely. The `[5/9]` doctor check verifies every queue named in the merged map has a heartbeat-fresh worker listening.
+
+---
+
 ## DocType fields
 
 Frappe-default fields (`name`, `creation`, `modified`, `owner`, `docstatus`) are omitted. The leading flag column shows: `!` = required, `r` = read-only, `u` = unique.

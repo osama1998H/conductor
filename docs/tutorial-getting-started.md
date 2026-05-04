@@ -2,7 +2,7 @@
 
 This tutorial walks you through a complete first-run experience: install Conductor on a site, configure Redis, start a worker and the scheduler, enqueue your first job, and verify the install end-to-end. Allow about 10 minutes.
 
-You succeed when `bench conductor doctor --demo` exits 0 with all six checks green.
+You succeed when `bench conductor doctor --demo` exits 0 with all nine checks green.
 
 This is the operator-first happy path. App-developer use cases (writing job functions, defining workflows) come after.
 
@@ -38,16 +38,21 @@ The installer creates the default `Conductor Queue` rows (`critical`, `default`,
 bench --site frappe.localhost conductor doctor
 ```
 
-Expected — all four health checks pass and exit code 0:
+Expected — exit code 0 and seven lines green. Each `OK` carries a parenthetical detail; the snippet below shows the form:
 
 ```
-[1/6] Redis connectivity........................................ OK
-[2/6] Default queues seeded..................................... OK
-[3/6] Consumer groups exist..................................... OK
-[4/6] XADD/XREADGROUP/XACK round-trip........................... OK
+[1/9] Redis connectivity..................................... OK  (redis://…)
+[2/9] Default queues seeded.................................. OK  (critical, default, long, short, workflow)
+[3/9] Consumer groups exist.................................. OK  (groups created/verified)
+[4/9] XADD/XREADGROUP/XACK round-trip........................ OK  (round-trip OK)
+[5/9] Takeover queue coverage................................ OK  (takeover disabled — skipped)
+[6/9] Pause scheduler when takeover active................... OK  (takeover disabled — skipped)
+[7/9] frappe.enqueue shim active............................. OK  (intercept disabled — skipped)
 
 All checks passed. Conductor is healthy.
 ```
+
+Checks `[5/9]` through `[7/9]` are gated on the bench-wide flags that opt in to Frappe-scheduler takeover and the in-process `frappe.enqueue` patch; they pass with a `skipped` detail until you turn those flags on. The full check table lives in [`reference-cli.md`](reference-cli.md#doctor). To enable them, see [`how-to-route-frappe-scheduled-jobs.md`](how-to-route-frappe-scheduled-jobs.md).
 
 If any check fails, see [If something went wrong](#if-something-went-wrong) at the end of this page before continuing.
 
@@ -140,20 +145,23 @@ Now that a worker is running, the doctor's end-to-end demo passes too:
 bench --site frappe.localhost conductor doctor --demo
 ```
 
-Expected — all **six** checks pass and exit code 0:
+Expected — all **nine** checks pass and exit code 0. Each `OK` carries a parenthetical detail (`(round-trip OK)`, `(takeover disabled — skipped)`, etc.); the lines below elide it for readability:
 
 ```
-[1/6] Redis connectivity........................................ OK
-[2/6] Default queues seeded..................................... OK
-[3/6] Consumer groups exist..................................... OK
-[4/6] XADD/XREADGROUP/XACK round-trip........................... OK
-[5/6] End-to-end demo dispatch (conductor.demo.echo)............ OK
-[6/6] Result round-trip......................................... OK
+[1/9] Redis connectivity..................................... OK
+[2/9] Default queues seeded.................................. OK
+[3/9] Consumer groups exist.................................. OK
+[4/9] XADD/XREADGROUP/XACK round-trip........................ OK
+[5/9] Takeover queue coverage................................ OK
+[6/9] Pause scheduler when takeover active................... OK
+[7/9] frappe.enqueue shim active............................. OK
+[8/9] End-to-end demo dispatch (conductor.demo.echo)......... OK
+[9/9] Result round-trip...................................... OK
 
 All checks passed. Conductor is healthy.
 ```
 
-The demo dispatches `conductor.demo.echo`, waits for the worker to run it, and verifies the result round-trip. If steps 5–6 fail, the worker is not consuming the `default` queue — recheck `bench start` is running and that the `conductor_worker` line is alive.
+The demo dispatches `conductor.demo.echo`, waits for the worker to run it, and verifies the result round-trip. If `[8/9]` or `[9/9]` fails, the worker is not consuming the `default` queue — recheck `bench start` is running and that the `conductor_worker` line is alive.
 
 ---
 
@@ -174,6 +182,6 @@ You have a working Conductor install. From here:
 - **`doctor` step 1 (Redis connectivity) fails** — Redis is not running, or `conductor.redis_url` points at the wrong port. Check `redis-cli -p <port> ping` returns `PONG`.
 - **Step 2 fails** — the install did not seed the default queues. Re-run `bench --site SITE install-app conductor`. If that fails, look at the install log for a stacktrace.
 - **Step 3 fails** — Redis is reachable but rejected the consumer-group create. Usually a permissions issue on a managed Redis. Check the user has `XGROUP` access.
-- **Steps 5 and 6 fail with "demo job did not terminate within 10s"** — no worker is consuming the `default` queue. Confirm `bench start` is running and the `conductor_worker` line is alive.
+- **Step `[8/9]` or `[9/9]` fails with "demo job did not terminate within 10s"** — no worker is consuming the `default` queue. Confirm `bench start` is running and the `conductor_worker` line is alive.
 - **Dashboard 404** — Conductor is installed but the static assets are not built. Run `cd apps/conductor/dashboard && yarn install && yarn build`, then `bench --site SITE clear-cache`.
 - **`ImportError: No module named 'conductor'` in the console** — Conductor is not installed on the site you opened the console for. Install with `bench --site SITE install-app conductor`.

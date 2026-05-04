@@ -4,43 +4,47 @@
       <div class="mb-3">
         <Button variant="outline" @click="reload">Refresh</Button>
       </div>
-      <Card class="p-0 flex-1 overflow-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Status</TableHead>
-              <TableHead>Worker</TableHead>
-              <TableHead>Host</TableHead>
-              <TableHead>PID</TableHead>
-              <TableHead>Queues</TableHead>
-              <TableHead>HB age</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow
-              v-for="row in sortedRows"
-              :key="row.name"
-              :class="['cursor-pointer', row.name === worker_id ? 'bg-muted' : 'hover:bg-muted/50']"
-              @click="open(row.name)"
-            >
-              <TableCell><StatusBadge :status="row.status" /></TableCell>
-              <TableCell class="font-mono text-xs">{{ row.name }}</TableCell>
-              <TableCell>{{ row.host }}</TableCell>
-              <TableCell>{{ row.pid }}</TableCell>
-              <TableCell class="font-mono text-xs">{{ parseQueues(row.queues) }}</TableCell>
-              <TableCell>
-                <Tooltip>
-                  <TooltipTrigger as-child>
-                    <span class="text-xs text-muted-foreground">{{ heartbeatAge(row.last_heartbeat) }}</span>
-                  </TooltipTrigger>
-                  <TooltipContent>{{ row.last_heartbeat || "—" }}</TooltipContent>
-                </Tooltip>
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
-        <div v-if="!rows.length" class="p-6 text-center text-muted-foreground text-sm">No workers registered.</div>
-      </Card>
+      <TooltipProvider>
+        <Card class="p-0 flex-1 overflow-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Status</TableHead>
+                <TableHead>Worker</TableHead>
+                <TableHead>Host</TableHead>
+                <TableHead>PID</TableHead>
+                <TableHead>Queues</TableHead>
+                <TableHead>HB age</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow
+                v-for="row in sortedRows"
+                :key="row.name"
+                :class="['cursor-pointer', row.name === worker_id ? 'bg-muted' : 'hover:bg-muted/50']"
+                @click="open(row.name)"
+              >
+                <TableCell><StatusBadge :status="row.status" /></TableCell>
+                <TableCell class="font-mono text-xs">{{ row.name }}</TableCell>
+                <TableCell>{{ row.host }}</TableCell>
+                <TableCell>{{ row.pid }}</TableCell>
+                <TableCell class="font-mono text-xs">{{ parseQueues(row.queues) }}</TableCell>
+                <TableCell>
+                  <Tooltip>
+                    <TooltipTrigger as-child>
+                      <span class="text-xs text-muted-foreground cursor-help">{{ heartbeatAge(row.last_heartbeat) }}</span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <code class="text-xs">{{ row.last_heartbeat || "—" }}</code>
+                    </TooltipContent>
+                  </Tooltip>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+          <div v-if="!rows.length" class="p-6 text-center text-muted-foreground text-sm">No workers registered.</div>
+        </Card>
+      </TooltipProvider>
     </div>
 
     <div v-if="worker_id" class="flex-1 min-w-0 overflow-auto">
@@ -125,7 +129,7 @@ import { Button } from "@/components/ui/button";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const props = defineProps({ worker_id: String });
 const router = useRouter();
@@ -143,9 +147,23 @@ function parseQueues(raw) {
   }
 }
 
+// `last_heartbeat` is stored UTC-naive (matches conductor.worker.now_naive).
+// Frappe's API serializes it without a TZ suffix, e.g. "2026-05-04 11:39:30".
+// JS Date constructor parses such strings as LOCAL time, adding the host's
+// UTC offset as a phantom age. Normalize by appending 'Z' so it parses as UTC.
+function parseUtcNaive(s) {
+  if (!s) return null;
+  const str = String(s);
+  // Already has TZ info or is an epoch number.
+  if (typeof s === "number" || /[zZ]|[+-]\d\d:?\d\d$/.test(str)) return new Date(s);
+  return new Date(str.replace(" ", "T") + "Z");
+}
+
 function heartbeatAge(hb) {
   if (!hb) return "—";
-  const seconds = Math.max(0, Math.floor((Date.now() - new Date(hb).getTime()) / 1000));
+  const d = parseUtcNaive(hb);
+  if (!d) return "—";
+  const seconds = Math.max(0, Math.floor((Date.now() - d.getTime()) / 1000));
   if (seconds < 60) return `${seconds}s`;
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
   return `${Math.floor(seconds / 3600)}h`;
@@ -158,7 +176,9 @@ const sortedRows = computed(() => {
     const aRank = STATUS_RANK[a.status] ?? 99;
     const bRank = STATUS_RANK[b.status] ?? 99;
     if (aRank !== bRank) return aRank - bRank;
-    return new Date(b.last_heartbeat || 0) - new Date(a.last_heartbeat || 0);
+    const av = parseUtcNaive(a.last_heartbeat);
+    const bv = parseUtcNaive(b.last_heartbeat);
+    return (bv ? bv.getTime() : 0) - (av ? av.getTime() : 0);
   });
 });
 

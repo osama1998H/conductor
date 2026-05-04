@@ -60,9 +60,20 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _now_naive() -> datetime:
-    """MariaDB DATETIME doesn't accept tz-aware strings."""
+def now_naive() -> datetime:
+    """UTC-naive timestamp matching MariaDB DATETIME storage.
+
+    All Conductor reads/writes of `last_heartbeat`, `last_execution`,
+    `reviewed_at`, etc. compare against this value. Using a local-naive
+    `datetime.now()` would introduce the host's UTC offset as a phantom
+    age delta — see Plan-2's M7 doctor fix for the reasoning.
+    """
     return _now().replace(tzinfo=None)
+
+
+# Back-compat alias for any in-tree caller still using the underscore name.
+# Drop in v2.1 once external imports settle.
+_now_naive = now_naive
 
 
 def _preview(value) -> str:
@@ -87,8 +98,8 @@ def _register_worker(worker_id: str, queues: list[str], site: str) -> None:
         "queues": json.dumps(queues),
         "site": site,
         "status": "ALIVE",
-        "started_at": _now_naive(),
-        "last_heartbeat": _now_naive(),
+        "started_at": now_naive(),
+        "last_heartbeat": now_naive(),
     }).insert(ignore_permissions=True)
     frappe.db.commit()
 
@@ -102,7 +113,7 @@ def _heartbeat(worker_id: str) -> None:
     frappe.db.set_value(
         "Conductor Worker",
         worker_id,
-        {"last_heartbeat": _now_naive(), "status": "ALIVE"},
+        {"last_heartbeat": now_naive(), "status": "ALIVE"},
         update_modified=False,
     )
     frappe.db.commit()
@@ -141,8 +152,8 @@ def _register_worker_pool(
                     "queues": json.dumps(queues),
                     "site": site,
                     "status": "ALIVE",
-                    "started_at": _now_naive(),
-                    "last_heartbeat": _now_naive(),
+                    "started_at": now_naive(),
+                    "last_heartbeat": now_naive(),
                 }).insert(ignore_permissions=True)
                 frappe.db.commit()
         finally:
@@ -168,7 +179,7 @@ def _heartbeat_pool(
             frappe.db.set_value(
                 "Conductor Worker",
                 worker_id,
-                {"last_heartbeat": _now_naive(), "status": "ALIVE"},
+                {"last_heartbeat": now_naive(), "status": "ALIVE"},
                 update_modified=False,
             )
             frappe.db.commit()
@@ -214,7 +225,7 @@ def _set_job_running(job_id: str, worker_id: str) -> None:
     frappe.db.set_value(
         "Conductor Job",
         job_id,
-        {"status": "RUNNING", "started_at": _now_naive(), "worker_id": worker_id},
+        {"status": "RUNNING", "started_at": now_naive(), "worker_id": worker_id},
         update_modified=False,
     )
     frappe.db.commit()
@@ -225,7 +236,7 @@ def _set_job_succeeded(job_id: str, result) -> None:
     frappe.db.set_value(
         "Conductor Job",
         job_id,
-        {"status": "SUCCEEDED", "finished_at": _now_naive(), "result_preview": _preview(result)},
+        {"status": "SUCCEEDED", "finished_at": now_naive(), "result_preview": _preview(result)},
         update_modified=False,
     )
     frappe.db.commit()
@@ -296,7 +307,7 @@ def _move_to_dlq(msg: JobMessage, exc: BaseException, redis_client, site: str, *
         "doctype": "Conductor DLQ Entry",
         "job": msg.job_id,
         "queue": msg.queue,
-        "moved_at": _now_naive(),
+        "moved_at": now_naive(),
         "attempts": msg.attempt,
         "status": "PENDING_REVIEW",
         "last_error_type": type(exc).__name__,

@@ -38,9 +38,9 @@
             <TableCell @click="open(row.name)">{{ row.timezone }}</TableCell>
             <TableCell>
               <Switch
-                :checked="!!row.enabled"
+                :model-value="!!row.enabled"
                 :disabled="!isSysMgr"
-                @update:checked="onToggleEnabled(row)"
+                @update:model-value="onToggleEnabled(row)"
               />
             </TableCell>
             <TableCell class="text-2xs text-muted-foreground" @click="open(row.name)">{{ row.next_run_at }}</TableCell>

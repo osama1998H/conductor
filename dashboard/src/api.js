@@ -74,7 +74,11 @@ export async function listWorkflows() {
 }
 
 export async function listWorkflowRuns(opts = {}) {
-  return await callMethod("conductor.api.workflows.list_runs", opts);
+  const params = { limit: opts.limit || 50 };
+  if (opts.workflow) params.workflow = opts.workflow;
+  if (opts.status) params.status = opts.status;
+  if (opts.offset) params.offset = opts.offset;
+  return await callMethod("conductor.api.workflows.list_runs", params);
 }
 
 export async function getWorkflowRun(run_id) {

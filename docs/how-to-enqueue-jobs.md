@@ -67,21 +67,30 @@ Use `idempotency_key=` whenever two callers might race on the same logical opera
 
 ## Procedure 3 — Override `frappe.enqueue` app-wide
 
-Conductor ships a shim with `frappe.enqueue`'s exact call signature so existing code paths can switch over without changing every call site.
+Conductor ships a shim with `frappe.enqueue`'s exact call signature so existing code paths can switch over without changing every call site. Conductor's own `hooks.py` registers the HTTP override, so `/api/method/frappe.enqueue` calls already route through Conductor on every site that has the app installed — no client setup required.
 
-1. In a **client** app's `hooks.py` (not Conductor's), add the override:
+To catch **in-process** Python calls (`frappe.enqueue(...)` from inside a controller, hook, or another callsite) too, opt in via the bench-wide flag:
 
-    ```python
-    override_whitelisted_methods = {
-        "frappe.enqueue": "conductor.frappe_compat.enqueue",
+1. Edit `sites/common_site_config.json` (top-level — **not** nested under `conductor.*`):
+
+    ```json
+    {
+      "conductor_intercept_frappe_enqueue": true
     }
     ```
 
-2. Run `bench --site SITE clear-cache` so Frappe picks up the new override map.
+2. Restart bench (`bench restart` or `Ctrl-C` and `bench start`). The flag is read at module load; an existing process will not pick it up.
 
-3. Hit a `frappe.enqueue` HTTP endpoint and confirm the job lands on a Conductor queue, not RQ.
+3. From a Python callsite, dispatch through `frappe.enqueue` and confirm the job lands on a Conductor queue:
 
-**Caveat — read carefully.** `override_whitelisted_methods` rewrites HTTP `/api/method/frappe.enqueue` calls only. Intra-process Python calls (`frappe.enqueue(...)` from inside a controller, hook, or another in-process callsite) **bypass** the override and still go to Frappe RQ. To route every enqueue path, change those call sites to `conductor.enqueue(...)` directly, or migrate them in a follow-up pass after the HTTP override has shaken out.
+    ```python
+    import frappe
+    frappe.enqueue("frappe.utils.now")
+    ```
+
+The patched function checks per call whether the current site has conductor installed; sites without conductor fall back to the original `frappe.enqueue` and stay on RQ. The `[7/9]` `bench conductor doctor` check verifies the patch installed correctly.
+
+This flag does **not** catch Frappe's `Scheduled Job Type` rows — those are dispatched by Frappe's scheduler from a code path that imports `enqueue` directly, bypassing the patched binding. To route those rows, see [`how-to-route-frappe-scheduled-jobs.md`](how-to-route-frappe-scheduled-jobs.md).
 
 ---
 
@@ -91,4 +100,5 @@ Conductor ships a shim with `frappe.enqueue`'s exact call signature so existing 
 - **`enqueue` returns a `job_id` but the job never runs** — no worker is consuming the queue. Run `bench --site SITE conductor worker --queue <name>` and check `bench --site SITE conductor depth` for the queue's stream length.
 - **Two `enqueue` calls with the same `idempotency_key` return different ids** — the keys are not byte-identical (whitespace, case), or the TTL elapsed between calls. Print the keys before dispatch and confirm they match exactly.
 - **`frappe.ValidationError: Queue 'default' is disabled`** — open `Conductor Queue` in the Desk and re-enable the row, or pass an enabled `queue=` argument.
-- **Override added but old code still goes to RQ** — those code paths are intra-process, not HTTP. See the caveat above.
+- **Override added but old code still goes to RQ** — those code paths are in-process, and `conductor_intercept_frappe_enqueue` is not set in `common_site_config.json`. See Procedure 3.
+- **`Scheduled Job Type` rows still hit RQ even with the intercept flag set** — those bypass `frappe.enqueue`. Use `conductor_take_over_frappe_scheduler` instead — see [`how-to-route-frappe-scheduled-jobs.md`](how-to-route-frappe-scheduled-jobs.md).

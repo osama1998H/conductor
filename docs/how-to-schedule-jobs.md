@@ -1,8 +1,10 @@
 # Schedule jobs
 
-This page covers cron-style schedules: creating one in the Desk, managing schedules from the CLI, and writing the scheduled method so it survives at-least-once delivery.
+This page covers cron-style schedules created as `Conductor Schedule` rows: creating one in the Desk, managing schedules from the CLI, and writing the scheduled method so it survives at-least-once delivery.
 
 You succeed when a `Conductor Schedule` row fires its method on the documented cadence and `last_status` flips to `DISPATCHED`.
+
+> **Working with Frappe's existing `Scheduled Job Type` rows instead?** That's a different mechanism and a different doc — see [`how-to-route-frappe-scheduled-jobs.md`](how-to-route-frappe-scheduled-jobs.md). This page is for *new* schedules you create in Conductor's own DocType.
 
 The scheduler must be running for any of this to work — append `Procfile.conductor` to your bench's `Procfile` and run `bench start`. See [`reference-cli.md`](reference-cli.md#scheduler) for the long form.
 
