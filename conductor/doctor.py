@@ -12,11 +12,30 @@ from typing import Callable
 
 import frappe
 
+import json
+from dataclasses import dataclass
+from datetime import timedelta
+
+from conductor.frappe_scheduled_loop import (
+    ACTIVATION_FLAG,
+    DEFAULT_QUEUE_MAP,
+    QUEUE_MAP_KEY,
+)
+
 import conductor
 from conductor.client import get_redis
 from conductor.config import load_config
 from conductor.streams import CONSUMER_GROUP, ensure_consumer_group, stream_key
 from conductor.worker import run_worker_once
+
+WORKER_FRESHNESS_SECONDS = 90  # heartbeat window — must be > one heartbeat tick
+
+
+@dataclass
+class CheckResult:
+    ok: bool
+    detail: str
+
 
 OK = "\033[32mOK\033[0m"
 FAIL = "\033[31mFAIL\033[0m"
@@ -31,6 +50,73 @@ def _step(label: str, fn: Callable[[], str]) -> bool:
     except Exception as e:
         print(f"{line} {FAIL} ({e})")
         return False
+
+
+def _fetch_fresh_workers() -> list[dict]:
+    """Return Conductor Worker rows whose `last_heartbeat` is within the
+    freshness window. Each row carries `queues` as the raw JSON string from
+    the underlying Long Text field plus a `stale` boolean for tests that
+    want to inject staleness without seeding wall-clock data."""
+    threshold = datetime.now() - timedelta(seconds=WORKER_FRESHNESS_SECONDS)
+    rows = frappe.get_all(
+        "Conductor Worker",
+        fields=["name", "queues", "last_heartbeat"],
+        filters={"last_heartbeat": [">=", threshold]},
+        order_by="last_heartbeat desc",
+    )
+    return [{"name": r["name"], "queues": r["queues"], "stale": False} for r in rows]
+
+
+def _parse_queues(field_value: str) -> set[str]:
+    """`Conductor Worker.queues` is a JSON-encoded list. Return the set of
+    queue names. Tolerate empty/None/malformed values by returning an
+    empty set — a malformed worker row should not crash doctor."""
+    if not field_value:
+        return set()
+    try:
+        parsed = json.loads(field_value)
+    except (TypeError, ValueError):
+        return set()
+    if not isinstance(parsed, list):
+        return set()
+    return {str(q) for q in parsed}
+
+
+def check_takeover_queue_coverage(
+    *,
+    takeover_enabled: bool,
+    queue_map: dict[str, str],
+) -> CheckResult:
+    """Verify every queue the takeover loop dispatches to has at least one
+    heartbeat-fresh worker listening. No-op when the takeover flag is unset.
+
+    Pure function: takes the activation flag and the merged queue-map as
+    arguments so unit tests can exercise it without seeding site config."""
+    if not takeover_enabled:
+        return CheckResult(ok=True, detail="takeover disabled — skipped")
+
+    required_queues = set(queue_map.values()) or {"default"}
+    fresh = [w for w in _fetch_fresh_workers() if not w.get("stale")]
+    covered: set[str] = set()
+    for w in fresh:
+        covered |= _parse_queues(w.get("queues") or "")
+
+    missing = required_queues - covered
+    if missing:
+        missing_csv = ", ".join(sorted(missing))
+        covered_csv = ", ".join(sorted(covered)) or "none"
+        return CheckResult(
+            ok=False,
+            detail=(
+                f"takeover dispatches to {{{', '.join(sorted(required_queues))}}} but "
+                f"workers cover {{{covered_csv}}} — uncovered: {missing_csv}. "
+                f"Add `--queue {missing_csv}` to a `bench conductor worker` Procfile entry."
+            ),
+        )
+    return CheckResult(
+        ok=True,
+        detail=f"all takeover queues covered ({', '.join(sorted(required_queues))})",
+    )
 
 
 def run(*, demo: bool = False) -> int:
@@ -68,10 +154,24 @@ def run(*, demo: bool = False) -> int:
         r.delete(skey)
         return "round-trip OK"
 
-    ok &= _step("[1/6] Redis connectivity", check_redis)
-    ok &= _step("[2/6] Default queues seeded", check_queues)
-    ok &= _step("[3/6] Consumer groups exist", check_groups)
-    ok &= _step("[4/6] XADD/XREADGROUP/XACK round-trip", check_round_trip)
+    ok &= _step("[1/7] Redis connectivity", check_redis)
+    ok &= _step("[2/7] Default queues seeded", check_queues)
+    ok &= _step("[3/7] Consumer groups exist", check_groups)
+    ok &= _step("[4/7] XADD/XREADGROUP/XACK round-trip", check_round_trip)
+
+    def check_takeover_coverage() -> str:
+        conf = frappe.local.conf or {}
+        takeover_enabled = bool(conf.get(ACTIVATION_FLAG, False))
+        merged = dict(DEFAULT_QUEUE_MAP)
+        merged.update(conf.get(QUEUE_MAP_KEY) or {})
+        result = check_takeover_queue_coverage(
+            takeover_enabled=takeover_enabled, queue_map=merged,
+        )
+        if not result.ok:
+            raise RuntimeError(result.detail)
+        return result.detail
+
+    ok &= _step("[5/7] Takeover queue coverage", check_takeover_coverage)
 
     if demo:
         job_id_holder = {}
@@ -102,8 +202,8 @@ def run(*, demo: bool = False) -> int:
             frappe.db.commit()
             return "round-trip preserved"
 
-        ok &= _step("[5/6] End-to-end demo dispatch (conductor.demo.echo)", step_dispatch)
-        ok &= _step("[6/6] Result round-trip", step_result)
+        ok &= _step("[6/7] End-to-end demo dispatch (conductor.demo.echo)", step_dispatch)
+        ok &= _step("[7/7] Result round-trip", step_result)
 
     if ok:
         print("\n\033[32mAll checks passed. Conductor is healthy.\033[0m")

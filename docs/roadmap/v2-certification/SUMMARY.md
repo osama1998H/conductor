@@ -38,9 +38,9 @@ recorded by Conductor — exactly the v2 KPI in action).
 2. **Queue-mismatch operator footgun** (M2). Takeover loop's queue-map
    sends Daily/Weekly/Monthly to `long`. If the bench worker doesn't
    listen on `long`, jobs strand silently. **Fix:** Procfile updated to
-   `--queue default --queue long`. **Plan-2 follow-up:** doctor
-   health-gate that warns when worker queue coverage doesn't match the
-   queue-map's range.
+   `--queue default --queue long`. **M7 fix landed in commit `<HASH-2>`:**
+   `bench conductor doctor` now warns when worker queue coverage doesn't
+   match the takeover queue-map's range.
 3. **`bench conductor dlq list` does NOT inherit bench's `--site`**
    (M3). CLI inconsistency. **Plan-2 follow-up:** make `dlq list`
    default `--site` from the bench context like every other subcommand.
