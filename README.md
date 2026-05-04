@@ -4,7 +4,6 @@ A reliability-first background job platform for Frappe / ERPNext.
 
 Conductor coexists with Frappe RQ on the same Redis instance and gives you durable at-least-once execution, declarative retries, idempotent dispatch, scheduled jobs, DAG workflows with compensations, and a real-time operations dashboard — without rewriting your existing `frappe.enqueue` callsites.
 
-**v2.0.0 — empirically certified.** Four-day campaign on a real Frappe + HRMS bench: 9300+ successful dispatches, 0 failed, every active `Scheduled Job Type` row dispatched and recorded end-to-end. Conductor's scheduler now reads `tabScheduled Job Type` directly so it catches Frappe scheduler ticks (the in-process `frappe.enqueue` patch alone cannot — Frappe imports the function at module load, bypassing patched bindings). Full certification artifacts: [`docs/roadmap/v2-certification/`](docs/roadmap/v2-certification/). v2 roadmap: [`docs/roadmap/v2.md`](docs/roadmap/v2.md).
 
 ## Features
 
