@@ -37,7 +37,7 @@ is purely visual; behavioural verification was done in light mode.
 | 10 | Jobs | Retry button works | Pick FAILED row → click Retry → confirm → new attempt | No FAILED rows present at test time; Retry control surface exists on row detail (`Retry as-is` is the equivalent on the DLQ page). Action chain is verified by `tests/test_dlq_commands.py::test_dlq_retry_re_enqueues_pending_rows` | — | ➖ deferred |
 | 11 | Jobs | Cancel button works | Pick QUEUED/RUNNING row → cancel → status flips | No QUEUED/RUNNING rows at test time (workers caught up). Cancel action chain is verified live by `tests/v2_certification/cli_runner.py::_scenario_cancel_live` (Plan-2 Task 9) | — | ➖ deferred |
 | 12 | DLQ | DataTable renders | Table with rows | 25 PENDING_REVIEW entries; columns Select/Queue/Status/Attempts/Last error/Moved at | `12-dlq-page-light.png` | ✓ |
-| 13 | DLQ | Bulk-select + bulk-retry | Check 3 rows → "Retry selected" in sticky action bar → confirm → rows leave DLQ | Checkboxes select cleanly (3/25 with `aria-checked=true`), but **NO bulk-action bar appears**. The dashboard provides only per-row Retry/Discard via the row detail panel — no bulk operation surface | `13-dlq-bulk-select-light.png` | ✗ |
+| 13 | DLQ | Bulk-select + bulk-retry | Check 3 rows → "Retry selected" in sticky action bar → confirm → rows leave DLQ | **FIXED in Plan-3 B.2.** After D7 checkbox binding fix: selecting rows now grows `selected` set; sticky bulk-action bar appears at viewport bottom with "Retry (N)" / "Discard (N)" / "Clear" buttons. Confirm dialog renders; cancelled out to preserve real DLQ data. | `13-dlq-bulk-select-light.png` | ✓ |
 | 14 | DLQ | Edit-and-retry dialog | Click Edit → modify args JSON → Retry → new Conductor Job | Per-row `Edit & retry…` button opens a dialog with args/kwargs JSON editors and Cancel/Save & retry buttons. Cancelled out without mutating data | `14-dlq-edit-dialog-light.png`, `14-dlq-row-detail-light.png` | ✓ |
 | 15 | DLQ | Discard works | Check row → Discard → confirm → row removed | Per-row `Discard` button opens an alert-dialog "Discard this entry? This cannot be undone." with Cancel/Discard. Confirmation dialog renders correctly. Cancelled out to preserve real DLQ data | `15-dlq-discard-confirm-light.png` | ✓ |
 | 16 | Schedules | Switch toggles | Click Switch → enabled flips, toggle back | First row's switch (`demo-heartbeat`) toggled `aria-checked` false→true→false cleanly | `16-schedules-toggle-light.png` | ✓ |
@@ -126,23 +126,44 @@ Live smoke: `bench execute conductor.api.workflows.list_runs` returns 10
 DemoDiamond/DemoCompensatingDiamond runs; the Workflows page's Recent
 runs table populates correctly.
 
-### Finding D4 — DLQ has no bulk-action surface
+### Finding D4 — DLQ has no bulk-action surface — FIXED in Plan-3 Phase B
 
 The catalog's Scenario 13 expects "Retry selected" in a sticky action
-bar after multi-select. The dashboard's DLQ page has working row
-checkboxes (selection state tracked correctly via `aria-checked`) but
-no bulk-action surface ever appears. Only per-row Retry/Edit/Discard
-exist via the row detail panel.
+bar after multi-select. The dashboard's DLQ page had working checkboxes
+but no bulk-action surface appeared.
 
-Two reasonable resolutions:
-- Implement the bulk-action bar (matches catalog expectation, scales
-  better for operators triaging many rows).
-- Update the catalog to reflect the per-row-only design intent.
+Root cause: two compounding issues:
 
-The dashboard backend already supports bulk operations: `bench conductor
-dlq retry --queue X --limit N` retries multiple rows in one call; an
-`Operator selected: 3 → Retry all` button could trivially wrap that
-endpoint.
+1. **Checkbox prop-name binding (D7)** — the parent's `selected` set
+   never grew when checkboxes were clicked. The visual flip was
+   uncontrolled internal state. Fixed in commit `0be78a2`.
+
+2. **Non-sticky action bar** — the existing `<Card v-if="selected.size > 0">`
+   was below the table, not anchored to the viewport. With D7 fixed the
+   bar became reachable, but was still easy to miss when the table was
+   tall.
+
+**Fixed in commit `<HASH-D4>`.**
+
+Backend (`conductor/api/dashboard.py`): hardened `dlq_retry` and
+`dlq_discard` to return `{retried, failed}` / `{discarded, failed}`
+counts instead of raising on unknown names. Names that don't exist or
+are not in `PENDING_REVIEW` count as `failed`; the operation continues
+for the remaining names. `reviewed_at` now uses `now_naive()` (UTC-naive)
+matching all other write paths.
+
+Frontend (`dashboard/src/pages/DlqPage.vue`): replaced the plain
+`<Card>` action bar with a `position: sticky` strip anchored to the
+viewport bottom. Shows `N entries selected`, with "Retry (N)", "Discard
+(N)" (SysMgr only), "Edit & retry…" (SysMgr, single safe selection),
+and "Clear" buttons. Buttons disable during in-flight requests
+(`bulkBusy`). Failed-count feedback surfaces as a warning toast when
+`failed > 0`.
+
+Tests (`tests/test_dashboard_api.py`): four regression tests pin the
+hardened behavior — `now_naive` usage (source-level), error-tolerant
+counting for unknown names on both retry and discard paths. Full suite:
+293 passed / 18 skipped.
 
 ### Finding D5 — No tooltip on Workers heartbeat hover (Scenario 20)
 

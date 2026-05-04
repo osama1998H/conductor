@@ -227,6 +227,12 @@ def get_dlq_entry(name: str) -> dict[str, Any]:
 
 @frappe.whitelist()
 def dlq_retry(entry_names: list[str] | str) -> dict[str, Any]:
+    """Retry a list of DLQ entries by name.
+
+    Names that don't exist or are not in PENDING_REVIEW status count as
+    failed (no exception raised). Returns {retried, failed} counts so
+    callers can surface partial-failure feedback without a full abort.
+    """
     _require_read()
     if not (frappe.has_permission("Conductor DLQ Entry", "write")
             or "Conductor Operator" in frappe.get_roles()):
@@ -235,41 +241,59 @@ def dlq_retry(entry_names: list[str] | str) -> dict[str, Any]:
     if isinstance(entry_names, str):
         entry_names = _json.loads(entry_names)
 
-    retried = 0
+    retried, failed = 0, 0
     for name in entry_names:
-        entry = frappe.get_doc("Conductor DLQ Entry", name)
-        decoded = _dlq_payload_decoded(entry.payload)
-        _enqueue_for_retry(
-            decoded["method"],
-            queue=decoded["queue"],
-            **decoded["kwargs"],
-        )
-        frappe.db.set_value("Conductor DLQ Entry", name, {
-            "status": "RETRIED",
-            "reviewed_by": frappe.session.user,
-            "reviewed_at": frappe.utils.now_datetime(),
-        })
-        retried += 1
+        try:
+            if not frappe.db.exists("Conductor DLQ Entry", name):
+                failed += 1
+                continue
+            entry = frappe.get_doc("Conductor DLQ Entry", name)
+            if entry.status != "PENDING_REVIEW":
+                failed += 1
+                continue
+            decoded = _dlq_payload_decoded(entry.payload)
+            _enqueue_for_retry(
+                decoded["method"],
+                queue=decoded["queue"],
+                **decoded["kwargs"],
+            )
+            frappe.db.set_value("Conductor DLQ Entry", name, {
+                "status": "RETRIED",
+                "reviewed_by": frappe.session.user,
+                "reviewed_at": now_naive(),
+            })
+            retried += 1
+        except Exception:
+            failed += 1
 
     frappe.db.commit()
-    return {"retried": retried}
+    return {"retried": retried, "failed": failed}
 
 
 @frappe.whitelist()
 def dlq_discard(entry_names: list[str] | str) -> dict[str, Any]:
+    """Discard a list of DLQ entries by name.
+
+    Names that don't exist count as failed (no exception raised). Returns
+    {discarded, failed} counts so callers can surface partial-failure
+    feedback without a full abort.
+    """
     _require_destructive()
     if isinstance(entry_names, str):
         entry_names = _json.loads(entry_names)
-    discarded = 0
+    discarded, failed = 0, 0
     for name in entry_names:
+        if not frappe.db.exists("Conductor DLQ Entry", name):
+            failed += 1
+            continue
         frappe.db.set_value("Conductor DLQ Entry", name, {
             "status": "DISCARDED",
             "reviewed_by": frappe.session.user,
-            "reviewed_at": frappe.utils.now_datetime(),
+            "reviewed_at": now_naive(),
         })
         discarded += 1
     frappe.db.commit()
-    return {"discarded": discarded}
+    return {"discarded": discarded, "failed": failed}
 
 
 @frappe.whitelist()
@@ -296,7 +320,7 @@ def dlq_edit_and_retry(name: str, args_json: str, kwargs_json: str) -> str:
     frappe.db.set_value("Conductor DLQ Entry", name, {
         "status": "RETRIED",
         "reviewed_by": frappe.session.user,
-        "reviewed_at": frappe.utils.now_datetime(),
+        "reviewed_at": now_naive(),
     })
     frappe.db.commit()
     return new_id
