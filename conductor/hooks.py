@@ -10,14 +10,13 @@ app_license = "mit"
 
 # required_apps = []
 
-# Each item in the list will be shown as an app in the apps page.
-# `logo` and `has_permission` are intentionally omitted: there's no
-# logo asset shipped yet (v2.1 backlog) and dashboard access is gated
-# server-side by _require_read in conductor.api.dashboard, so the
-# tile is visible to everyone on /apps but the API enforces roles.
+# `has_permission` is intentionally omitted: dashboard access is gated
+# server-side by _require_read in conductor.api.dashboard, so the tile
+# is visible to everyone on /apps but the API enforces roles.
 add_to_apps_screen = [
 	{
 		"name": "conductor",
+		"logo": "/assets/conductor/images/logo.png",
 		"title": "Conductor",
 		"route": "/conductor-dashboard",
 	}
