@@ -165,12 +165,26 @@ hardened behavior — `now_naive` usage (source-level), error-tolerant
 counting for unknown names on both retry and discard paths. Full suite:
 293 passed / 18 skipped.
 
-### Finding D5 — No tooltip on Workers heartbeat hover (Scenario 20)
+### Finding D5 — No tooltip on Workers heartbeat hover — FIXED in Plan-3 Phase B
 
-Catalog says hovering a heartbeat cell should reveal a tooltip with the
-exact ISO timestamp. No tooltip element appears (`[role="tooltip"]`
-count stays 0 across a 1.5s hover dwell). Either the feature was never
-implemented or the tooltip mounting is broken.
+The HB age cell on the Workers page now shows the relative duration
+(post-A: `1s`, `3s` for fresh heartbeats) and reveals the exact
+ISO `last_heartbeat` on hover via a shadcn-vue Tooltip.
+
+**Root cause:** `<TooltipProvider>` was absent. reka-ui's `TooltipRoot`
+requires a provider ancestor to supply the tooltip context; without it,
+hover events never trigger the content portal, so `[role="tooltip"]`
+count stayed 0. `<TooltipTrigger as-child>` was already wired correctly.
+
+**Fixed:** added `TooltipProvider` to the import and wrapped the table
+`<Card>` in `<TooltipProvider>` (once at the table level, not per-row).
+Also added `cursor-help` to the trigger span and `<code class="text-xs">`
+around the timestamp in `<TooltipContent>`.
+
+Live smoke (Plan-3 Phase B, commit `<HASH-D5>`): hovering the first HB
+age cell rendered `[role="tooltip"]` with `tooltipCount === 1` and
+`tooltipText === "2026-05-04 17:59:35.480183"` — exact ISO timestamp
+from Frappe's UTC-naive serialisation.
 
 ### Finding D6 — No JsonViewer expansion on workflow step row click (Scenario 25)
 

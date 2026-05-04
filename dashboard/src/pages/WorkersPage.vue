@@ -4,43 +4,47 @@
       <div class="mb-3">
         <Button variant="outline" @click="reload">Refresh</Button>
       </div>
-      <Card class="p-0 flex-1 overflow-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Status</TableHead>
-              <TableHead>Worker</TableHead>
-              <TableHead>Host</TableHead>
-              <TableHead>PID</TableHead>
-              <TableHead>Queues</TableHead>
-              <TableHead>HB age</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow
-              v-for="row in sortedRows"
-              :key="row.name"
-              :class="['cursor-pointer', row.name === worker_id ? 'bg-muted' : 'hover:bg-muted/50']"
-              @click="open(row.name)"
-            >
-              <TableCell><StatusBadge :status="row.status" /></TableCell>
-              <TableCell class="font-mono text-xs">{{ row.name }}</TableCell>
-              <TableCell>{{ row.host }}</TableCell>
-              <TableCell>{{ row.pid }}</TableCell>
-              <TableCell class="font-mono text-xs">{{ parseQueues(row.queues) }}</TableCell>
-              <TableCell>
-                <Tooltip>
-                  <TooltipTrigger as-child>
-                    <span class="text-xs text-muted-foreground">{{ heartbeatAge(row.last_heartbeat) }}</span>
-                  </TooltipTrigger>
-                  <TooltipContent>{{ row.last_heartbeat || "—" }}</TooltipContent>
-                </Tooltip>
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
-        <div v-if="!rows.length" class="p-6 text-center text-muted-foreground text-sm">No workers registered.</div>
-      </Card>
+      <TooltipProvider>
+        <Card class="p-0 flex-1 overflow-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Status</TableHead>
+                <TableHead>Worker</TableHead>
+                <TableHead>Host</TableHead>
+                <TableHead>PID</TableHead>
+                <TableHead>Queues</TableHead>
+                <TableHead>HB age</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow
+                v-for="row in sortedRows"
+                :key="row.name"
+                :class="['cursor-pointer', row.name === worker_id ? 'bg-muted' : 'hover:bg-muted/50']"
+                @click="open(row.name)"
+              >
+                <TableCell><StatusBadge :status="row.status" /></TableCell>
+                <TableCell class="font-mono text-xs">{{ row.name }}</TableCell>
+                <TableCell>{{ row.host }}</TableCell>
+                <TableCell>{{ row.pid }}</TableCell>
+                <TableCell class="font-mono text-xs">{{ parseQueues(row.queues) }}</TableCell>
+                <TableCell>
+                  <Tooltip>
+                    <TooltipTrigger as-child>
+                      <span class="text-xs text-muted-foreground cursor-help">{{ heartbeatAge(row.last_heartbeat) }}</span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <code class="text-xs">{{ row.last_heartbeat || "—" }}</code>
+                    </TooltipContent>
+                  </Tooltip>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+          <div v-if="!rows.length" class="p-6 text-center text-muted-foreground text-sm">No workers registered.</div>
+        </Card>
+      </TooltipProvider>
     </div>
 
     <div v-if="worker_id" class="flex-1 min-w-0 overflow-auto">
@@ -125,7 +129,7 @@ import { Button } from "@/components/ui/button";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const props = defineProps({ worker_id: String });
 const router = useRouter();
