@@ -67,3 +67,18 @@ def test_drift_correction_does_not_modify_job_rows(fake_redis, fake_frappe):
             fake_redis, "alpha.test", just_gone_worker_ids=["w1", "w2"],
         )
     assert update_calls == []
+
+
+def test_reaper_threshold_uses_utc_naive_not_local():
+    """Regression for the Plan-2-surfaced TZ bug: the reaper's `now`
+    must match `conductor.worker.now_naive()` (UTC-naive). Using
+    `datetime.now()` (local-naive) would mark all workers GONE on any
+    non-UTC bench. The fix is a one-liner; this test pins it."""
+    import inspect
+    from conductor import scheduler_loops
+    src = inspect.getsource(scheduler_loops._reaper_loop_iter)
+    assert "datetime.now()" not in src, (
+        "Reaper still uses datetime.now() (local-naive). "
+        "Switch to conductor.worker.now_naive() to match heartbeat write path."
+    )
+    assert "now_naive" in src
