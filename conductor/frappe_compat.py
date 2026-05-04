@@ -118,6 +118,12 @@ def uninstall_inprocess_patch() -> None:
         _frappe_module.enqueue = original
 
 
+def is_patch_installed() -> bool:
+    """True iff frappe.enqueue is currently the conductor-aware patched version."""
+    current = getattr(_frappe_module, "enqueue", None)
+    return bool(current and getattr(current, _PATCH_MARKER, False))
+
+
 def maybe_install_inprocess_patch() -> None:
     """Install the in-process patch unconditionally on conductor import.
 

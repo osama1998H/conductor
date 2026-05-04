@@ -103,3 +103,66 @@ def test_fetch_fresh_workers_filters_by_utc_naive_threshold():
     # Returned rows do NOT carry a synthetic `stale` field.
     assert rows == [{"name": "w1", "queues": '["default"]'}]
     assert "stale" not in rows[0]
+
+
+def test_check_pause_scheduler_passes_when_both_flags_set():
+    """When conductor_take_over_frappe_scheduler AND pause_scheduler are
+    both true, the gate is satisfied — only one scheduler fires each row."""
+    from conductor.doctor import check_pause_scheduler
+    result = check_pause_scheduler(takeover_enabled=True, pause_scheduler=True)
+    assert result.ok is True
+    assert "pause_scheduler" in result.detail.lower() or "required" in result.detail.lower()
+
+
+def test_check_pause_scheduler_fails_when_takeover_on_pause_off():
+    """When takeover is on but pause_scheduler is off, both schedulers
+    fire each row → silent double-firing. The check must catch this
+    loud, not silently."""
+    from conductor.doctor import check_pause_scheduler
+    result = check_pause_scheduler(takeover_enabled=True, pause_scheduler=False)
+    assert result.ok is False
+    assert "pause_scheduler" in result.detail.lower()
+    # Detail should give the operator the literal config keys to flip.
+    assert "common_site_config" in result.detail.lower() or "schedule" in result.detail.lower()
+
+
+def test_check_pause_scheduler_skipped_when_takeover_disabled():
+    """When the takeover flag is unset, pause_scheduler is irrelevant.
+    The check is a no-op so doctor doesn't fail on benches that don't
+    use the takeover loop."""
+    from conductor.doctor import check_pause_scheduler
+    result = check_pause_scheduler(takeover_enabled=False, pause_scheduler=False)
+    assert result.ok is True
+    assert "skipped" in result.detail.lower() or "disabled" in result.detail.lower()
+
+
+def test_check_shim_active_passes_when_intercept_on_and_patched():
+    """When conductor_intercept_frappe_enqueue is true and the patch
+    actually loaded, the gate is satisfied."""
+    from conductor.doctor import check_shim_active
+    with patch("conductor.doctor._is_shim_patched", return_value=True):
+        result = check_shim_active(intercept_enabled=True)
+    assert result.ok is True
+    assert "active" in result.detail.lower() or "installed" in result.detail.lower() or "patch" in result.detail.lower()
+
+
+def test_check_shim_active_fails_when_intercept_on_but_not_patched():
+    """When the flag is set but the patch failed to install (the Plan-1
+    bootstrap-timing footgun before the install_unconditionally fix),
+    the check must fail loud with a remediation hint."""
+    from conductor.doctor import check_shim_active
+    with patch("conductor.doctor._is_shim_patched", return_value=False):
+        result = check_shim_active(intercept_enabled=True)
+    assert result.ok is False
+    assert "shim" in result.detail.lower() or "patch" in result.detail.lower()
+    # Hint operator at the remediation.
+    assert "restart" in result.detail.lower() or "bootstrap" in result.detail.lower() or "bench" in result.detail.lower()
+
+
+def test_check_shim_active_skipped_when_intercept_disabled():
+    """When the intercept flag is unset, the patch is irrelevant.
+    No-op."""
+    from conductor.doctor import check_shim_active
+    result = check_shim_active(intercept_enabled=False)
+    assert result.ok is True
+    assert "skipped" in result.detail.lower() or "disabled" in result.detail.lower()

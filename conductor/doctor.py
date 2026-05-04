@@ -126,6 +126,58 @@ def check_takeover_queue_coverage(
     )
 
 
+def check_pause_scheduler(*, takeover_enabled: bool, pause_scheduler: bool) -> CheckResult:
+    """Verify the operator has paused Frappe's own scheduler when the
+    takeover loop is active. Otherwise both schedulers fire each row →
+    silent double-firing."""
+    if not takeover_enabled:
+        return CheckResult(ok=True, detail="takeover disabled — skipped")
+    if pause_scheduler:
+        return CheckResult(ok=True, detail="pause_scheduler set as required")
+    return CheckResult(
+        ok=False,
+        detail=(
+            "conductor_take_over_frappe_scheduler is true but pause_scheduler "
+            "is false. Both schedulers will fire each row. Set "
+            "`pause_scheduler: 1` in common_site_config.json or remove the "
+            "`schedule:` line from the bench Procfile."
+        ),
+    )
+
+
+def _is_shim_patched() -> bool:
+    """True iff the in-process frappe.enqueue patch actually installed.
+    Imported lazily so doctor doesn't depend on conductor.frappe_compat
+    being available outside its normal load path."""
+    try:
+        from conductor.frappe_compat import is_patch_installed
+        return is_patch_installed()
+    except Exception:
+        return False
+
+
+def check_shim_active(*, intercept_enabled: bool) -> CheckResult:
+    """Verify the in-process frappe.enqueue patch is installed when the
+    intercept flag asks for it. Plan-1 hit a bootstrap-timing footgun
+    where the flag was true in conf but the bootstrap had already run
+    pre-init, so the patch never installed; commit 97dccae fixed that
+    by always running the bootstrap. This check turns any future
+    regression of that contract into a loud doctor failure."""
+    if not intercept_enabled:
+        return CheckResult(ok=True, detail="intercept disabled — skipped")
+    if _is_shim_patched():
+        return CheckResult(ok=True, detail="frappe.enqueue patch active")
+    return CheckResult(
+        ok=False,
+        detail=(
+            "conductor_intercept_frappe_enqueue is true but the in-process "
+            "patch is not installed. Restart the bench (`bench restart`) "
+            "to re-fire conductor's bootstrap. If the problem persists, "
+            "the patch path itself is broken — check conductor logs."
+        ),
+    )
+
+
 def run(*, demo: bool = False) -> int:
     site = frappe.local.site
     cfg = load_config(frappe.local.conf)
@@ -161,10 +213,10 @@ def run(*, demo: bool = False) -> int:
         r.delete(skey)
         return "round-trip OK"
 
-    ok &= _step("[1/7] Redis connectivity", check_redis)
-    ok &= _step("[2/7] Default queues seeded", check_queues)
-    ok &= _step("[3/7] Consumer groups exist", check_groups)
-    ok &= _step("[4/7] XADD/XREADGROUP/XACK round-trip", check_round_trip)
+    ok &= _step("[1/9] Redis connectivity", check_redis)
+    ok &= _step("[2/9] Default queues seeded", check_queues)
+    ok &= _step("[3/9] Consumer groups exist", check_groups)
+    ok &= _step("[4/9] XADD/XREADGROUP/XACK round-trip", check_round_trip)
 
     def check_takeover_coverage() -> str:
         conf = frappe.local.conf or {}
@@ -181,7 +233,30 @@ def run(*, demo: bool = False) -> int:
             raise RuntimeError(result.detail)
         return result.detail
 
-    ok &= _step("[5/7] Takeover queue coverage", check_takeover_coverage)
+    ok &= _step("[5/9] Takeover queue coverage", check_takeover_coverage)
+
+    def check_pause_scheduler_live() -> str:
+        conf = frappe.local.conf or {}
+        result = check_pause_scheduler(
+            takeover_enabled=bool(conf.get(ACTIVATION_FLAG, False)),
+            pause_scheduler=bool(conf.get("pause_scheduler", False)),
+        )
+        if not result.ok:
+            raise RuntimeError(result.detail)
+        return result.detail
+
+    ok &= _step("[6/9] Pause scheduler when takeover active", check_pause_scheduler_live)
+
+    def check_shim_active_live() -> str:
+        conf = frappe.local.conf or {}
+        result = check_shim_active(
+            intercept_enabled=bool(conf.get("conductor_intercept_frappe_enqueue", False)),
+        )
+        if not result.ok:
+            raise RuntimeError(result.detail)
+        return result.detail
+
+    ok &= _step("[7/9] frappe.enqueue shim active", check_shim_active_live)
 
     if demo:
         job_id_holder = {}
@@ -212,8 +287,8 @@ def run(*, demo: bool = False) -> int:
             frappe.db.commit()
             return "round-trip preserved"
 
-        ok &= _step("[6/7] End-to-end demo dispatch (conductor.demo.echo)", step_dispatch)
-        ok &= _step("[7/7] Result round-trip", step_result)
+        ok &= _step("[8/9] End-to-end demo dispatch (conductor.demo.echo)", step_dispatch)
+        ok &= _step("[9/9] Result round-trip", step_result)
 
     if ok:
         print("\n\033[32mAll checks passed. Conductor is healthy.\033[0m")
