@@ -45,11 +45,13 @@ recorded by Conductor — exactly the v2 KPI in action).
    (M3). CLI inconsistency. **Plan-2 follow-up:** make `dlq list`
    default `--site` from the bench context like every other subcommand.
 4. **Honcho cascades a worker SIGKILL into a full bench outage** (M5).
-   Operational, not a Conductor bug. **Plan-2 follow-up:** add a
-   "process supervision" section to
+   Operational, not a Conductor bug. **M7 resolution:** added the
+   "Process supervision in production" section to
    `docs/explanation-architecture.md` recommending systemd /
-   supervisord / per-worker honcho instances over single-Procfile
-   honcho for production multi-worker deployments.
+   supervisord / split-Honcho over single-Procfile honcho for
+   production multi-worker deployments. Reclaim correctness itself
+   is unchanged and continues to be verified by
+   `tests_chaos/test_kill_during_run.py`.
 5. **Inflight-cap test deferred** (M5). The test was interrupted by
    the SIGKILL cascade. Cheap to re-run.
 6. **Real upstream-Frappe DLQ entry** caught: `delete_dynamic_links()
