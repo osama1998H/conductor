@@ -32,7 +32,11 @@ def test_dlq_list_renders_rows():
     with patch("conductor.commands.dlq._fetch_dlq_rows", return_value=_fake_dlq_rows()), \
          patch("conductor.commands.dlq._connect_to_site"), \
          patch("conductor.commands.dlq._disconnect"):
-        result = runner.invoke(dlq_group, ["list", "--site", "frappe.localhost"])
+        result = runner.invoke(
+            dlq_group,
+            ["list", "--site", "frappe.localhost"],
+            obj={"sites": ["frappe.localhost"], "profile": False},
+        )
     assert result.exit_code == 0, result.output
     assert "DLQE-001" in result.output
     assert "DLQE-002" in result.output
@@ -50,9 +54,11 @@ def test_dlq_list_filter_by_queue():
     with patch("conductor.commands.dlq._fetch_dlq_rows", side_effect=fake_fetch), \
          patch("conductor.commands.dlq._connect_to_site"), \
          patch("conductor.commands.dlq._disconnect"):
-        result = runner.invoke(dlq_group, [
-            "list", "--site", "frappe.localhost", "--queue", "default",
-        ])
+        result = runner.invoke(
+            dlq_group,
+            ["list", "--site", "frappe.localhost", "--queue", "default"],
+            obj={"sites": ["frappe.localhost"], "profile": False},
+        )
     assert result.exit_code == 0, result.output
     assert captured["filters"] == {"queue": "default"}
 
@@ -67,9 +73,11 @@ def test_dlq_list_filter_by_status():
     with patch("conductor.commands.dlq._fetch_dlq_rows", side_effect=fake_fetch), \
          patch("conductor.commands.dlq._connect_to_site"), \
          patch("conductor.commands.dlq._disconnect"):
-        result = runner.invoke(dlq_group, [
-            "list", "--site", "frappe.localhost", "--status", "RETRIED",
-        ])
+        result = runner.invoke(
+            dlq_group,
+            ["list", "--site", "frappe.localhost", "--status", "RETRIED"],
+            obj={"sites": ["frappe.localhost"], "profile": False},
+        )
     assert result.exit_code == 0
     assert captured["filters"] == {"status": "RETRIED"}
 
@@ -96,7 +104,11 @@ def test_dlq_retry_re_enqueues_pending_rows():
          patch("conductor.commands.dlq._mark_dlq_row", side_effect=fake_flip), \
          patch("conductor.commands.dlq._connect_to_site"), \
          patch("conductor.commands.dlq._disconnect"):
-        result = runner.invoke(dlq_group, ["retry", "--site", "frappe.localhost"])
+        result = runner.invoke(
+            dlq_group,
+            ["retry", "--site", "frappe.localhost"],
+            obj={"sites": ["frappe.localhost"], "profile": False},
+        )
     assert result.exit_code == 0, result.output
     assert enqueued == [("conductor.demo.echo", "default", {})]
     # Tolerant payload assertion: status RETRIED, reviewed_by present, reviewed_at present.
@@ -118,7 +130,11 @@ def test_dlq_retry_skips_non_pending_rows():
                side_effect=lambda *a, **k: enq_called.append(True) or "x"), \
          patch("conductor.commands.dlq._connect_to_site"), \
          patch("conductor.commands.dlq._disconnect"):
-        result = runner.invoke(dlq_group, ["retry", "--site", "frappe.localhost"])
+        result = runner.invoke(
+            dlq_group,
+            ["retry", "--site", "frappe.localhost"],
+            obj={"sites": ["frappe.localhost"], "profile": False},
+        )
     assert result.exit_code == 0
     assert enq_called == []
 
@@ -136,6 +152,36 @@ def test_dlq_discard_marks_row():
                side_effect=lambda name, payload: flipped.append((name, payload["status"]))), \
          patch("conductor.commands.dlq._connect_to_site"), \
          patch("conductor.commands.dlq._disconnect"):
-        result = runner.invoke(dlq_group, ["discard", "--site", "frappe.localhost"])
+        result = runner.invoke(
+            dlq_group,
+            ["discard", "--site", "frappe.localhost"],
+            obj={"sites": ["frappe.localhost"], "profile": False},
+        )
     assert result.exit_code == 0
     assert flipped == [("DLQE-001", "DISCARDED")]
+
+
+def test_dlq_list_inherits_site_from_bench_context():
+    """Regression for M7 Finding 3: `bench --site X conductor dlq list` (no
+    explicit `--site` after the subcommand) must succeed by inheriting the
+    site from the bench Click context, mirroring `conductor depth`'s
+    behavior. See docs/roadmap/v2-certification/cli.md Finding 1."""
+    from conductor.commands.dlq import dlq_group
+    runner = CliRunner()
+    captured = {}
+
+    def fake_connect(site):
+        captured["site"] = site
+
+    with patch("conductor.commands.dlq._fetch_dlq_rows", return_value=_fake_dlq_rows()), \
+         patch("conductor.commands.dlq._connect_to_site", side_effect=fake_connect), \
+         patch("conductor.commands.dlq._disconnect"):
+        # No --site after the subcommand. The bench context provides it
+        # via frappe.commands.pass_context, which reads ctx.obj["sites"][0].
+        result = runner.invoke(
+            dlq_group,
+            ["list"],
+            obj={"sites": ["frappe.localhost"], "profile": False},
+        )
+    assert result.exit_code == 0, result.output
+    assert captured.get("site") == "frappe.localhost"

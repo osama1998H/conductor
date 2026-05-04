@@ -3,7 +3,7 @@
 **Captured:** 2026-05-04, against `frappe.localhost` site.
 **Mechanism:** `tests/v2_certification/cli_runner.py` invokes each `bench conductor` subcommand via subprocess, evaluates exit code + stdout fragments.
 
-**Summary:** 6/7 pass on the automated runner. Findings below cover the failure case.
+**Summary:** 7/7 pass on the automated runner.
 
 ## Automated scenarios
 
@@ -13,7 +13,7 @@
 | doctor --demo | `bench --site frappe.localhost conductor doctor --demo` | 0 | ✓ |  |
 | depth | `bench --site frappe.localhost conductor depth` | 0 | ✓ |  |
 | schedule list | `bench --site frappe.localhost conductor schedule list` | 0 | ✓ |  |
-| dlq list | `bench --site frappe.localhost conductor dlq list` | 2 | ✗ | exit 2 != 0 |
+| dlq list | `bench --site frappe.localhost conductor dlq list` | 0 | ✓ | inherits --site from bench context as of M7 fix |
 | workflow list | `bench --site frappe.localhost conductor workflow list` | 0 | ✓ |  |
 | migrate-from-rq dry-run | `bench --site frappe.localhost conductor migrate-from-rq --site frappe.localhost` | 0 | ✓ |  |
 
@@ -34,18 +34,14 @@
 
 ## Findings
 
-### Finding 1: `dlq list` does NOT inherit bench `--site`
+### Finding 1: FIXED (commit `<HASH-1>`)
 
-Most `bench conductor *` subcommands inherit the site from `bench --site X conductor ...`. `dlq list` and `migrate-from-rq` both require an explicit `--site` argument AFTER the subcommand. CLI inconsistency.
-
-Reproducer:
-```
-$ bench --site frappe.localhost conductor dlq list
-Error: Missing option '--site'.
-$ bench --site frappe.localhost conductor dlq list --site frappe.localhost
-# works
-```
-**Recommendation (M7 fix candidate):** the `dlq list` Click command should default `--site` from the bench context (the same pattern other subcommands use via `pass_context` + `get_site`). `migrate-from-rq` is intentionally narrow because it explicitly migrates per-tenant — the `--site` is load-bearing there. `dlq list` has no such excuse.
+`dlq list/retry/discard` now inherit `--site` from the bench Click
+context via `pass_context` + `get_site`, matching the pattern used by
+`depth`. Explicit `--site` after the subcommand still works for
+backwards compatibility. `migrate-from-rq` keeps its required `--site`
+because per-tenant migration intent makes the explicit argument
+load-bearing.
 
 ### Finding 2: real upstream-Frappe DLQ entry caught by Conductor
 
