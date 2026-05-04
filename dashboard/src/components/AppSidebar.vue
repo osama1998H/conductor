@@ -2,9 +2,11 @@
   <Sidebar collapsible="icon">
     <SidebarHeader>
       <div class="flex items-center gap-2 px-2 py-2">
-        <div class="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground font-bold">
-          C
-        </div>
+        <img
+          :src="logoUrl"
+          alt="Conductor"
+          class="h-8 w-8 rounded-md object-contain"
+        />
         <span class="font-semibold group-data-[collapsible=icon]:hidden">Conductor</span>
       </div>
     </SidebarHeader>
@@ -42,6 +44,10 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { NAV_LINKS, matchPrefix } from "@/lib/nav";
+
+// Served by Frappe from `conductor/public/images/`. Bound (not a literal `src`)
+// so Vite doesn't try to resolve `/assets/...` against the dashboard build.
+const logoUrl = "/assets/conductor/images/logo.png";
 
 const route = useRoute();
 </script>
