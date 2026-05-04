@@ -6,15 +6,13 @@ real round-trip dispatch via `conductor.demo.echo`.
 
 from __future__ import annotations
 
+import json
 import time
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 import frappe
-
-import json
-from dataclasses import dataclass
-from datetime import timedelta
 
 from conductor.frappe_scheduled_loop import (
     ACTIVATION_FLAG,
@@ -56,8 +54,16 @@ def _fetch_fresh_workers() -> list[dict]:
     """Return Conductor Worker rows whose `last_heartbeat` is within the
     freshness window. Each row carries `queues` as the raw JSON string from
     the underlying Long Text field plus a `stale` boolean for tests that
-    want to inject staleness without seeding wall-clock data."""
-    threshold = datetime.now() - timedelta(seconds=WORKER_FRESHNESS_SECONDS)
+    want to inject staleness without seeding wall-clock data.
+
+    `last_heartbeat` is written as UTC-naive by `conductor.worker._now_naive`,
+    so the threshold is computed in the same timezone. Using `datetime.now()`
+    (local) instead would be wrong by the host's UTC offset on any non-UTC
+    bench."""
+    threshold = (
+        datetime.now(timezone.utc).replace(tzinfo=None)
+        - timedelta(seconds=WORKER_FRESHNESS_SECONDS)
+    )
     rows = frappe.get_all(
         "Conductor Worker",
         fields=["name", "queues", "last_heartbeat"],
