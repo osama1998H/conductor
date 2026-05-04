@@ -207,3 +207,16 @@ def test_dlq_list_explicit_site_overrides_context():
         )
     assert result.exit_code == 0, result.output
     assert captured.get("site") == "explicit.site"
+
+
+def test_dlq_retry_writes_reviewed_at_utc_naive():
+    """reviewed_at is operator-visible audit metadata. Stored UTC-naive
+    everywhere else; align dlq retry/discard writes with the rest."""
+    import inspect
+    from conductor.commands import dlq
+    src = inspect.getsource(dlq)
+    assert "datetime.now()" not in src, (
+        "dlq module still uses datetime.now() for reviewed_at. "
+        "Switch to now_naive() in both retry_command and discard_command."
+    )
+    assert "now_naive" in src, "dlq module should use now_naive()"

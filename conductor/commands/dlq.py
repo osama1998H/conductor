@@ -11,6 +11,7 @@ import frappe
 from frappe.commands import get_site, pass_context
 
 from conductor.serialization import loads as msgpack_loads
+from conductor.worker import now_naive
 
 
 def _connect_to_site(site: str) -> None:
@@ -160,7 +161,7 @@ def retry_command(ctx, site, queue, limit, job_id):
                 _mark_dlq_row(r["name"], {
                     "status": "RETRIED",
                     "reviewed_by": _get_actor(),
-                    "reviewed_at": datetime.now().replace(microsecond=0),
+                    "reviewed_at": now_naive().replace(microsecond=0),
                 })
                 moved += 1
                 click.echo(f"  retried {r['name']} (job {r['job']} -> {new_id})")
@@ -192,7 +193,7 @@ def discard_command(ctx, site, queue, limit, job_id):
             _mark_dlq_row(r["name"], {
                 "status": "DISCARDED",
                 "reviewed_by": _get_actor(),
-                "reviewed_at": datetime.now().replace(microsecond=0),
+                "reviewed_at": now_naive().replace(microsecond=0),
             })
             click.echo(f"  discarded {r['name']}")
         click.echo(f"\nDiscarded {len(rows)} entries.")
