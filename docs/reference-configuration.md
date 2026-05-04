@@ -32,6 +32,38 @@ All keys live under the `conductor` object in `sites/<site>/site_config.json`:
 
 ---
 
+## Bench-wide flags (`common_site_config.json`)
+
+Unlike the per-site `conductor.*` keys above, the following flag is read from
+`common_site_config.json` so it applies to every process the bench launches —
+workers, scheduler, `bench schedule`, `bench execute`, web request handlers.
+
+### `conductor_intercept_frappe_enqueue`
+
+| | |
+|---|---|
+| Where | `sites/common_site_config.json` (top-level, **not** nested under `conductor.*`) |
+| Type  | bool |
+| Default | `false` |
+
+When `true`, conductor monkey-patches `frappe.enqueue` at process start so
+in-process Python calls (e.g., from `bench schedule` ticks, from application
+code that calls `frappe.enqueue` directly) are routed through
+`conductor.enqueue`. The patch checks per call whether the current site has
+conductor installed; sites without conductor fall back to the original
+`frappe.enqueue` and stay on RQ.
+
+Set this once you have conductor processes running on every site that needs
+it. Combine with the `override_whitelisted_methods` block in
+`conductor/hooks.py` to also catch HTTP `/api/method/frappe.enqueue` calls.
+
+Failures during bootstrap (e.g., a malformed `common_site_config.json` value
+of unexpected type) emit a `warning` via `frappe.logger("conductor")` and
+otherwise no-op — `frappe.enqueue` reverts to its original RQ behaviour and
+import never raises.
+
+---
+
 ## DocType fields
 
 Frappe-default fields (`name`, `creation`, `modified`, `owner`, `docstatus`) are omitted. The leading flag column shows: `!` = required, `r` = read-only, `u` = unique.

@@ -1,1 +1,18 @@
-conductor_worker: bench --site all conductor worker --queue default --concurrency 4
+# Conductor v2 sample Procfile — single-machine development + smoke runs.
+#
+# WARNING: do NOT use this in production for multi-worker deployments.
+# Honcho cascades a single-process exit into a full-tree shutdown,
+# defeating Conductor's reclaim guarantee.
+#
+# For production, see docs/explanation-architecture.md "Process
+# supervision in production" — recommended supervisors are systemd
+# unit-per-worker, supervisord with autorestart=true, or split honcho
+# (one for bench infra, one per worker).
+#
+# Usage from a Frappe bench:
+#   honcho -f apps/conductor/Procfile.conductor start
+# or, for a single combined Procfile, copy the entries below into the
+# bench's main Procfile after stopping bench's RQ `worker:` line.
+
+conductor_worker: bench --site all conductor worker --queue default --queue long --concurrency 4
+conductor_scheduler: bench --site all conductor scheduler

@@ -22,12 +22,14 @@ except ImportError:  # pragma: no cover — only missing in pure-unit-test env
 
 from conductor.cron import compute_next_run_at
 from conductor.dispatcher import enqueue as conductor_enqueue
+from conductor.frappe_scheduled_loop import _frappe_scheduled_loop
 from conductor.inflight import correct_drift
 from conductor.logging import get_logger
 from conductor.scheduled import drain_due_messages
 from conductor.serialization import loads as msgpack_loads
 from conductor.streams import ensure_consumer_group, stream_key
 from conductor.sweeper import sweep_orphans
+from conductor.worker import now_naive
 
 log = get_logger("conductor.scheduler_loops")
 
@@ -148,7 +150,7 @@ def _reaper_loop_iter(site: str, frappe) -> list[str]:
 
     Returns the list of worker IDs flipped to GONE in this pass so the caller
     can drift-correct their inflight counters."""
-    now = datetime.now()
+    now = now_naive()
     gone_cut = now - timedelta(seconds=REAPER_GONE_AGE_SECONDS)
     stale_cut = now - timedelta(seconds=REAPER_STALE_AGE_SECONDS)
     prune_cut = now - timedelta(seconds=REAPER_PRUNE_AGE_SECONDS)
@@ -299,6 +301,11 @@ def start_all_loops(
         target=_sweeper_loop,
         args=(redis_client, site, sites_path, stop_event, lost_lock_event),
         daemon=True, name="conductor-scheduler-sweeper",
+    ))
+    threads.append(threading.Thread(
+        target=_frappe_scheduled_loop,
+        args=(stop_event, lost_lock_event, site, sites_path),
+        daemon=True, name="conductor-scheduler-frappe-scheduled",
     ))
     for t in threads:
         t.start()

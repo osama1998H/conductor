@@ -1,0 +1,151 @@
+[
+  {
+    "label": "doctor",
+    "argv": [
+      "bench",
+      "--site",
+      "frappe.localhost",
+      "conductor",
+      "doctor"
+    ],
+    "exit": 0,
+    "stdout": "[1/7] Redis connectivity.............................................. \u001b[32mOK\u001b[0m  (redis://127.0.0.1:11000/2)\n[2/7] Default queues seeded........................................... \u001b[32mOK\u001b[0m  (critical, default, kpi-conductor, long, short, workflow)\n[3/7] Consumer groups exist........................................... \u001b[32mOK\u001b[0m  (groups created/verified)\n[4/7] XADD/XREADGROUP/XACK round-trip................................. \u001b[32mOK\u001b[0m  (round-trip OK)\n[5/7] Takeover queue coverage......................................... \u001b[32mOK\u001b[0m  (all takeover queues covered (default, long))\n\n\u001b[32mAll checks passed. Conductor is healthy.\u001b[0m\n",
+    "stderr": "",
+    "pass": true,
+    "fail_reason": ""
+  },
+  {
+    "label": "doctor --demo",
+    "argv": [
+      "bench",
+      "--site",
+      "frappe.localhost",
+      "conductor",
+      "doctor",
+      "--demo"
+    ],
+    "exit": 0,
+    "stdout": "[1/7] Redis connectivity.............................................. \u001b[32mOK\u001b[0m  (redis://127.0.0.1:11000/2)\n[2/7] Default queues seeded........................................... \u001b[32mOK\u001b[0m  (critical, default, kpi-conductor, long, short, workflow)\n[3/7] Consumer groups exist........................................... \u001b[32mOK\u001b[0m  (groups created/verified)\n[4/7] XADD/XREADGROUP/XACK round-trip................................. \u001b[32mOK\u001b[0m  (round-trip OK)\n[5/7] Takeover queue coverage......................................... \u001b[32mOK\u001b[0m  (all takeover queues covered (default, long))\n2026-05-04 15:28:15 [info     ] job_enqueued                   job_id=78f0824a-fdb3-43fa-a2ee-c4f579bc9f75 method=conductor.demo.echo queue=default\n[6/7] End-to-end demo dispatch (conductor.demo.echo).................. \u001b[32mOK\u001b[0m  (job_id=78f0824a-fdb3-43fa-a2ee-c4f579bc9f75 succeeded)\n2026-05-04 15:28:17 [info     ] job_enqueued                   job_id=70a68187-4375-4cc9-ae9b-12a64991b5f9 method=frappe.model.delete_doc.delete_dynamic_links queue=default\n[7/7] Result round-trip............................................... \u001b[32mOK\u001b[0m  (round-trip preserved)\n\n\u001b[32mAll checks passed. Conductor is healthy.\u001b[0m\n",
+    "stderr": "",
+    "pass": true,
+    "fail_reason": ""
+  },
+  {
+    "label": "depth",
+    "argv": [
+      "bench",
+      "--site",
+      "frappe.localhost",
+      "conductor",
+      "depth"
+    ],
+    "exit": 0,
+    "stdout": "site: frappe.localhost\nqueue          stream    dlq       scheduled  inflight  max_rps   max_concurrent\n-------------  --------  --------  ---------  --------  --------  --------------\ncritical       12        0         0          0         0         0             \ndefault        10011     8         0          0         0         0             \nkpi-conductor  150       50        0          0         0         0             \nlong           252       0         0          0         0         0             \nshort          12        0         0          0         0         0             \nworkflow       25        0         0          0         0         0             \n\n",
+    "stderr": "",
+    "pass": true,
+    "fail_reason": ""
+  },
+  {
+    "label": "schedule list",
+    "argv": [
+      "bench",
+      "--site",
+      "frappe.localhost",
+      "conductor",
+      "schedule",
+      "list"
+    ],
+    "exit": 0,
+    "stdout": "NAME                     EN CRON             TZ                 NEXT_RUN                  LAST_STATUS\ndemo-heartbeat            1 * * * * *        UTC                2026-05-04 12:29:00       DISPATCHED\ndemo-hourly-report        1 0 * * * *        UTC                2026-05-04 13:00:00       DISPATCHED\ndemo-nightly-cleanup      0 0 2 * * *        UTC                                          \nrn-test                   1 0 0 1 1 *        UTC                2027-01-01 00:00:00       DISPATCHED\n",
+    "stderr": "",
+    "pass": true,
+    "fail_reason": ""
+  },
+  {
+    "label": "dlq list",
+    "argv": [
+      "bench",
+      "--site",
+      "frappe.localhost",
+      "conductor",
+      "dlq",
+      "list"
+    ],
+    "exit": 0,
+    "stdout": "name        job                                   queue          moved_at                    last_error_type  last_error_message                                          \n----------  ------------------------------------  -------------  --------------------------  ---------------  ------------------------------------------------------------\na6giffir6q  70a68187-4375-4cc9-ae9b-12a64991b5f9  default        2026-05-04 12:28:17.644351  TypeError        delete_dynamic_links() got an unexpected keyword argument 'n\n56326v4tu6  b2a36f52-041a-4d4f-90c2-64d2d9b7fb57  default        2026-05-04 08:41:17.103084  TypeError        delete_dynamic_links() got an unexpected keyword argument 'n\nlch9qm0612  2c9e99e1-80cd-429d-8915-e626b331f71b  default        2026-04-30 10:29:08.965137  RuntimeError     intentional failure (kwargs={})                             \nlch7iq8nao  3375ecad-b02a-4b35-9fde-caac8fd7f903  default        2026-04-30 10:29:08.962420  RuntimeError     intentional failure (kwargs={})                             \nlchqnch26e  84268051-71a2-48fe-b32c-594beb3c59df  default        2026-04-30 10:29:08.951335  RuntimeError     intentional failure (kwargs={})                             \nlchmqj7u3c  59ba0f49-cf58-4cc3-9718-5fec25a3f114  default        2026-04-30 10:29:08.948690  RuntimeError     intentional failure (kwargs={})                             \nlch7p237og  fa98e255-0b07-4519-ab69-25e8e0705edd  default        2026-04-30 10:29:08.930028  RuntimeError     intentional failure (kwargs={})                             \nlchajoolt9  acb781f9-afa0-4296-8925-9aa3c29eb400  default        2026-04-30 10:29:08.928968  RuntimeError     intentional failure (kwargs={})                             \n068oj1tue5  b008677b-6521-4594-a7c3-a00fffedff95  kpi-conductor  2026-04-29 22:57:36.833009  RuntimeError     always_fail                                                 \n068dviqiqe  db17ce74-b246-4126-9170-a407bb6e13bb  kpi-conductor  2026-04-29 22:57:36.830831  RuntimeError     always_fail                                                 \n068lnghfoh  c1c7e16b-e71d-46ec-98a3-79b5921eaeb4  kpi-conductor  2026-04-29 22:57:36.807224  RuntimeError     always_fail                                                 \n068f6tqg1v  edca0731-fcc9-47ba-86e6-25da84337ccd  kpi-conductor  2026-04-29 22:57:36.803981  RuntimeError     always_fail                                                 \n068gusbd7t  17863c88-48d5-4666-818a-cc9495a96d63  kpi-conductor  2026-04-29 22:57:36.803400  RuntimeError     always_fail                                                 \n068hoepodo  e12226cf-b5eb-4255-a18c-1ba7b865a256  kpi-conductor  2026-04-29 22:57:36.801642  RuntimeError     always_fail                                                 \n0673a7lvf2  ba395848-5fe2-49a0-8821-90875fd8959d  kpi-conductor  2026-04-29 22:57:36.773029  RuntimeError     always_fail                                                 \n067co30f6i  4058d1af-e3a5-4e4b-9729-ae00510d3fe6  kpi-conductor  2026-04-29 22:57:36.772863  RuntimeError     always_fail                                                 \n067io6aakv  ded3a355-7c4c-4b84-97f4-d776412afd2a  kpi-conductor  2026-04-29 22:57:36.771078  RuntimeError     always_fail                                                 \n067gkelm64  51802552-54ab-43f8-8544-c3d3f8c826da  kpi-conductor  2026-04-29 22:57:36.771005  RuntimeError     always_fail                                                 \n05usf4nj5n  1a9032dc-4f2d-4681-b889-07a0a7b66697  kpi-conductor  2026-04-29 22:57:35.792740  RuntimeError     always_fail                                                 \n05td5fjaan  ece9e820-4cf6-4319-b676-0e5864648b82  kpi-conductor  2026-04-29 22:57:35.791868  RuntimeError     always_fail                                                 \n05ts51dru5  6250257b-5c10-463d-9723-98cf786851a7  kpi-conductor  2026-04-29 22:57:35.790607  RuntimeError     always_fail                                                 \n05tpv08rf6  61f9ac71-7cfa-4099-b28e-f71dfb4d9e51  kpi-conductor  2026-04-29 22:57:35.788894  RuntimeError     always_fail                                                 \n05tqut5ok7  baa0a672-0fa2-4e2c-9c50-bc659ea306c6  kpi-conductor  2026-04-29 22:57:35.760466  RuntimeError     always_fail                                                 \n05tpo9ffee  4570200c-6476-45f9-8a13-83ac370accfd  kpi-conductor  2026-04-29 22:57:35.759262  RuntimeError     always_fail                                                 \n05tei7l4ga  a5e95a97-63c2-4ddf-af33-695970f5df1d  kpi-conductor  2026-04-29 22:57:35.758775  RuntimeError     always_fail                                                 \n05tl7linb9  51f87a04-0a36-4a88-b752-ecc3d57ea87a  kpi-conductor  2026-04-29 22:57:35.757236  RuntimeError     always_fail                                                 \n05j8mm0r8m  c580857c-0f63-4b64-8019-480c09ac8d47  kpi-conductor  2026-04-29 22:57:34.776167  RuntimeError     always_fail                                                 \n05jducvk6c  02c8aeab-76ed-4db4-aaeb-26ffaa68f63f  kpi-conductor  2026-04-29 22:57:34.775676  RuntimeError     always_fail                                                 \n05jfb69inq  f0332de7-2170-4437-97a4-fa133bd9540e  kpi-conductor  2026-04-29 22:57:34.775527  RuntimeError     always_fail                                                 \n05jqjp3p46  c9423d7a-f29e-4689-a031-9168ac9df226  kpi-conductor  2026-04-29 22:57:34.749484  RuntimeError     always_fail                                                 \n05j3tckm2m  efd1d0e9-d030-4aa1-9dca-82a34dea591f  kpi-conductor  2026-04-29 22:57:34.747154  RuntimeError     always_fail                                                 \n05jnr5h07o  3833cca9-6b36-4126-bd0d-001f7c3db0dd  kpi-conductor  2026-04-29 22:57:34.746378  RuntimeError     always_fail                                                 \n05jcjnlqgt  d1ede5bb-bbf4-47dd-ad6e-bf167b347019  kpi-conductor  2026-04-29 22:57:34.744696  RuntimeError     always_fail                                                 \n05a94h8idd  b45c2691-1151-4ce9-abc1-5876ebe91847  kpi-conductor  2026-04-29 22:57:33.805417  RuntimeError     always_fail                                                 \n05a19pbl09  1225d8c7-e4f7-4482-9cc5-77c357a4b8ec  kpi-conductor  2026-04-29 22:57:33.805360  RuntimeError     always_fail                                                 \n05ar1ht5k3  645c3acc-8ddf-48e5-a090-19c90b27a470  kpi-conductor  2026-04-29 22:57:33.802062  RuntimeError     always_fail                                                 \n059vmhb9o0  1c748045-97ed-4cab-b4c5-9f2d7d210067  kpi-conductor  2026-04-29 22:57:33.780366  RuntimeError     always_fail                                                 \n059bs4g8rr  556178ab-ab07-4e20-8508-0d662083a55a  kpi-conductor  2026-04-29 22:57:33.776833  RuntimeError     always_fail                                                 \n0597ihq0dm  a7771808-2a4a-42b3-ae31-682e378f464e  kpi-conductor  2026-04-29 22:57:33.774490  RuntimeError     always_fail                                                 \n05999s97em  59f65ddc-0190-424c-8be5-d68ae21b90ba  kpi-conductor  2026-04-29 22:57:33.771437  RuntimeError     always_fail                                                 \n059k0en4h9  8973b63e-fe34-476d-8789-c35682af0d30  kpi-conductor  2026-04-29 22:57:33.745679  RuntimeError     always_fail                                                 \n059nncfnuv  3bac9045-786b-4b82-9644-1ce558edc9f0  kpi-conductor  2026-04-29 22:57:33.744896  RuntimeError     always_fail                                                 \n059uoodjih  84d14afb-1836-4541-933a-ab5dc89e1194  kpi-conductor  2026-04-29 22:57:33.743083  RuntimeError     always_fail                                                 \n0594h8lg2k  c2efe671-e457-4539-aea6-9b13c3665f5b  kpi-conductor  2026-04-29 22:57:33.737714  RuntimeError     always_fail                                                 \n05094q7h6e  538ff9a7-5282-431e-bb96-5664b81b13f4  kpi-conductor  2026-04-29 22:57:32.865047  RuntimeError     always_fail                                                 \n0504tdheer  31bc68df-2b65-4412-8c9f-995a08b1c435  kpi-conductor  2026-04-29 22:57:32.855111  RuntimeError     always_fail                                                 \n050fbs28ue  7df3c4d5-0fb7-4b8a-b802-80bc749af9c3  kpi-conductor  2026-04-29 22:57:32.854175  RuntimeError     always_fail                                                 \n050dps58c2  9a13850d-de6b-4dd8-900a-428fde64bdbc  kpi-conductor  2026-04-29 22:57:32.849129  RuntimeError     always_fail                                                 \n0500l9p408  3a2661aa-05ef-4275-a39a-32fa98809018  kpi-conductor  2026-04-29 22:57:32.826650  RuntimeError     always_fail                                                 \n050lps7qir  f407642e-9ab9-4cf6-acad-97dac5a4c8dc  kpi-conductor  2026-04-29 22:57:32.824701  RuntimeError     always_fail                                                 \n",
+    "stderr": "",
+    "pass": true,
+    "fail_reason": ""
+  },
+  {
+    "label": "workflow list",
+    "argv": [
+      "bench",
+      "--site",
+      "frappe.localhost",
+      "conductor",
+      "workflow",
+      "list"
+    ],
+    "exit": 0,
+    "stdout": "NAME                             V   EN LAST_BUMP                \nDemoCompensatingDiamond            1  1                          \nDemoDiamond                        1  1                          \nTestFlowForStep                    1  1                          \n",
+    "stderr": "",
+    "pass": true,
+    "fail_reason": ""
+  },
+  {
+    "label": "migrate-from-rq dry-run",
+    "argv": [
+      "bench",
+      "--site",
+      "frappe.localhost",
+      "conductor",
+      "migrate-from-rq",
+      "--site",
+      "frappe.localhost"
+    ],
+    "exit": 0,
+    "stdout": "\n=== DRY RUN report \u2014 site frappe.localhost ===\n  plan rows           : 20\n  skipped (other site): 0\n  skipped (callable)  : 2\n  failed              : 0\n\nFirst 5 plan rows:\n  {'rq_job_id': 'frappe.localhost::scheduled_job::frappe.monitor.flush', 'rq_queue': 'default', 'method': 'frappe.core.doctype.scheduled_job_type.scheduled_job_type.run_scheduled_job', 'target_queue': 'default'}\n  {'rq_job_id': 'frappe.localhost::scheduled_job::frappe.email.queue.retry_sending_emails', 'rq_queue': 'default', 'method': 'frappe.core.doctype.scheduled_job_type.scheduled_job_type.run_scheduled_job', 'target_queue': 'default'}\n  {'rq_job_id': 'frappe.localhost::scheduled_job::frappe.integrations.doctype.google_calendar.google_calendar.sync', 'rq_queue': 'default', 'method': 'frappe.core.doctype.scheduled_job_type.scheduled_job_type.run_scheduled_job', 'target_queue': 'default'}\n  {'rq_job_id': 'frappe.localhost::scheduled_job::hrms.hr.doctype.interview.interview.send_interview_reminder', 'rq_queue': 'default', 'method': 'frappe.core.doctype.scheduled_job_type.scheduled_job_type.run_scheduled_job', 'target_queue': 'default'}\n  {'rq_job_id': 'frappe.localhost::scheduled_job::frappe.email.doctype.email_account.email_account.pull', 'rq_queue': 'default', 'method': 'frappe.core.doctype.scheduled_job_type.scheduled_job_type.run_scheduled_job', 'target_queue': 'default'}\n\nRe-run with --commit to apply.\n",
+    "stderr": "",
+    "pass": true,
+    "fail_reason": ""
+  },
+  {
+    "label": "cancel",
+    "argv": [
+      "bench",
+      "--site",
+      "frappe.localhost",
+      "conductor",
+      "cancel",
+      "bb1c219b-6716-4769-bad0-c3ff4c3e73da"
+    ],
+    "exit": 0,
+    "stdout": "2026-05-04 15:28:20 [info     ] job_cancelled                  job_id=bb1c219b-6716-4769-bad0-c3ff4c3e73da prior_status=RUNNING\ncancelled: bb1c219b-6716-4769-bad0-c3ff4c3e73da\n",
+    "stderr": "",
+    "pass": true,
+    "fail_reason": "",
+    "final_status": "CANCELLED"
+  },
+  {
+    "label": "schedule run-now",
+    "argv": [
+      "bench",
+      "--site",
+      "frappe.localhost",
+      "conductor",
+      "schedule",
+      "run-now",
+      "v2cert-schedule-run-now"
+    ],
+    "exit": 0,
+    "stdout": "2026-05-04 15:28:21 [info     ] job_enqueued                   job_id=7708ace2-edda-48a3-93ac-663c350e76de method=conductor.demo.echo queue=default\nfired: v2cert-schedule-run-now \u2192 job 7708ace2-edda-48a3-93ac-663c350e76de\n",
+    "stderr": "",
+    "pass": true,
+    "fail_reason": "",
+    "found_job": {
+      "name": "7708ace2-edda-48a3-93ac-663c350e76de",
+      "status": "SUCCEEDED"
+    }
+  }
+]

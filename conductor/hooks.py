@@ -10,16 +10,17 @@ app_license = "mit"
 
 # required_apps = []
 
-# Each item in the list will be shown as an app in the apps page
-# add_to_apps_screen = [
-# 	{
-# 		"name": "conductor",
-# 		"logo": "/assets/conductor/logo.png",
-# 		"title": "Conductor",
-# 		"route": "/conductor",
-# 		"has_permission": "conductor.api.permission.has_app_permission"
-# 	}
-# ]
+# `has_permission` is intentionally omitted: dashboard access is gated
+# server-side by _require_read in conductor.api.dashboard, so the tile
+# is visible to everyone on /apps but the API enforces roles.
+add_to_apps_screen = [
+	{
+		"name": "conductor",
+		"logo": "/assets/conductor/images/logo.png",
+		"title": "Conductor",
+		"route": "/conductor-dashboard",
+	}
+]
 
 # Includes in <head>
 # ------------------
@@ -177,8 +178,10 @@ commands = ["conductor.commands.conductor_group"]
 # ------------------------------
 #
 # Route HTTP /api/method/frappe.enqueue calls through Conductor's drop-in
-# wrapper. NOTE: this only intercepts HTTP API calls; intra-process Python
-# `frappe.enqueue(...)` calls still hit RQ directly. Per master §3 #13.
+# shim. In-process Python `frappe.enqueue(...)` calls are also routed when
+# `conductor_intercept_frappe_enqueue: true` is set in
+# common_site_config.json (installed by
+# conductor.frappe_compat.maybe_install_inprocess_patch on conductor import).
 override_whitelisted_methods = {
     "frappe.enqueue": "conductor.frappe_compat.enqueue",
 }

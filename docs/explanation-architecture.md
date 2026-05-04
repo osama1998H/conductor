@@ -99,6 +99,56 @@ A throttled job is **not** a failure — it lands in `SCHEDULED_RETRY` with `las
 
 ---
 
+## Process supervision in production
+
+Conductor's reliability model assumes that workers can crash and the
+remaining workers will reclaim their pending entries via `XAUTOCLAIM`
+after the configured idle threshold (60s default). The reclaim path
+is verified end-to-end by `tests_chaos/test_kill_during_run.py`.
+
+Whether reclaim **actually happens in production** depends on the
+process supervisor that runs your `bench conductor worker` instances.
+If the supervisor cascades a single-worker crash into a full
+fleet shutdown, the surviving workers are killed before the reclaim
+window opens — and Conductor's correctness guarantee never gets a
+chance to fire.
+
+### Honcho (`bench start`) is not safe for multi-worker production
+
+`bench start` invokes Honcho with the bench `Procfile`. Honcho's
+default behavior is *cascade-on-exit*: any unexpected child process
+exit triggers SIGTERM to every other process in the tree. The v2
+certification campaign reproduced this on 2026-05-04 — a `kill -9`
+on one of two `conductor_worker` entries took down Redis, the web
+process, the socketio process, the second `conductor_worker`, and
+the conductor scheduler. See `docs/roadmap/v2-certification/multi-worker.md`
+for the captured cascade.
+
+This is fine for development. It is **not** fine for a production
+deployment that depends on Conductor's reclaim guarantee.
+
+### Recommended supervisors for production
+
+| Supervisor | Why it works | Trade-off |
+|---|---|---|
+| **systemd unit per worker** | Each worker has its own restart policy and unit boundary; one crash does not touch peers | Linux-only; needs root for unit-file installation |
+| **supervisord with `autorestart=true`** | Same isolation as systemd, no root needed; auto-restart fills the gap left by the crashed worker without touching peers | Extra dependency; slightly more configuration than systemd |
+| **Two separate Honcho processes** | Run bench infrastructure (Redis, web, socketio, schedule, scheduler) under one Honcho and each worker under its own Honcho. Cascade is contained to the per-worker Honcho — bench infra survives | More moving parts than a single `bench start`; needs a custom shell wrapper |
+| **Frappe Cloud's supervisor** | Already isolates workers; would not exhibit the cascade observed on local Honcho | Requires Frappe Cloud (out of scope for self-hosted v2.0.0) |
+
+### What this means for the v2 quickstart
+
+The `Procfile.conductor` shipped with v2 is for **single-machine
+development and the v2 certification campaign**. The v2.x release
+notes will recommend systemd / supervisord for production multi-worker
+deployments and link back to this section.
+
+The Conductor reclaim mechanism itself is correct — verified by
+`tests_chaos/test_kill_during_run.py`. This is purely guidance about
+how to run Conductor's processes so the reclaim path can do its job.
+
+---
+
 ## See also
 
 - [`reference-configuration.md`](reference-configuration.md) — every `site_config` key and DocType field referenced above.
