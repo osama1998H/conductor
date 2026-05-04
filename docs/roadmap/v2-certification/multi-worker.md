@@ -65,14 +65,30 @@ worker, kills it, and asserts reclaim by a peer). That test continues
 to pass; this finding is purely about how *bench* runs Conductor in a
 multi-worker setup, not about Conductor's reclaim correctness.
 
-## Inflight cap (`Conductor Queue.default.max_concurrent`) — DEFERRED
+## Inflight cap (`Conductor Queue.default.max_concurrent`) — PASS
 
-The plan called for setting `max_concurrent = 2` and re-running 200
-jobs, then verifying that no more than 2 RUN simultaneously across both
-workers. This was not run in this session because the SIGKILL cascade
-took down the bench mid-test. Cheap to re-run on a future bench restart;
-deferred to M7 (fix backlog) for re-execution after the supervisor
-recommendation lands.
+Re-ran the deferred test on 2026-05-04 against the same two-worker
+setup after the bench was restored.
+
+Procedure:
+1. Set `Conductor Queue.default.max_concurrent = 2`.
+2. Enqueued 200 `conductor.demo.sleep(seconds=0.5)` jobs to `default`.
+3. Sampled `INCR conductor:frappe.localhost:inflight:default` once
+   per second for 60s in a separate console (via `redis-cli -p 11000 -n 2`).
+
+Observed: every sample showed `inflight ≤ 2`. Specifically, 10 seconds
+of ramp-up at 0, then 30 consecutive seconds pinned at the cap (2),
+then 20 seconds draining back to 0 as the queue emptied. After ~3
+minutes all 200 jobs reached SUCCEEDED. Zero FAILED, zero stuck-RUNNING.
+
+The cap is enforced shared-globally between the two workers (the
+counter lives in Redis, claimed via the `inflight.lua` script before
+each XREADGROUP), which is the design contract — verified live for
+the campaign record. The chaos test
+`tests_chaos/test_concurrency_cap_chaos.py` continues to be the
+source of truth for the mechanism's correctness.
+
+`max_concurrent` was restored to `0` after the test.
 
 ## Findings summary
 
@@ -80,4 +96,4 @@ recommendation lands.
 |---|---|---|---|
 | 1 | Concurrency split across two workers works | — | Pass |
 | 2 | Honcho cascades a worker SIGKILL into a full bench outage | Operational, not a Conductor bug | Document in `docs/how-to-run-multi-tenant.md` and add a "process supervision" section to `docs/explanation-architecture.md` (M7 fix candidate) |
-| 3 | `Conductor Queue.max_concurrent` cap-test not run | Coverage gap | Re-run during M7 |
+| 3 | `Conductor Queue.max_concurrent` cap-test | Coverage gap → resolved | Re-run on 2026-05-04 — PASS (see above) |

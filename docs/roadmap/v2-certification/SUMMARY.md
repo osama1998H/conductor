@@ -52,8 +52,10 @@ recorded by Conductor — exactly the v2 KPI in action).
    production multi-worker deployments. Reclaim correctness itself
    is unchanged and continues to be verified by
    `tests_chaos/test_kill_during_run.py`.
-5. **Inflight-cap test deferred** (M5). The test was interrupted by
-   the SIGKILL cascade. Cheap to re-run.
+5. **Inflight-cap test deferred** (M5). **M7 resolution:** re-ran on
+   2026-05-04 with `max_concurrent = 2` against the two-worker setup;
+   inflight stayed ≤ 2 for the entire 60-second window across 200
+   jobs and all reached SUCCEEDED. Captured in `multi-worker.md`. (Commit `<HASH-4>`.)
 6. **Real upstream-Frappe DLQ entry** caught: `delete_dynamic_links()
    got an unexpected keyword argument 'now'` (M3 finding). Not a
    Conductor bug; an HRMS/erpnext API mismatch. Demonstrates the v2
