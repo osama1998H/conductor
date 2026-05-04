@@ -143,9 +143,23 @@ function parseQueues(raw) {
   }
 }
 
+// `last_heartbeat` is stored UTC-naive (matches conductor.worker.now_naive).
+// Frappe's API serializes it without a TZ suffix, e.g. "2026-05-04 11:39:30".
+// JS Date constructor parses such strings as LOCAL time, adding the host's
+// UTC offset as a phantom age. Normalize by appending 'Z' so it parses as UTC.
+function parseUtcNaive(s) {
+  if (!s) return null;
+  const str = String(s);
+  // Already has TZ info or is an epoch number.
+  if (typeof s === "number" || /[zZ]|[+-]\d\d:?\d\d$/.test(str)) return new Date(s);
+  return new Date(str.replace(" ", "T") + "Z");
+}
+
 function heartbeatAge(hb) {
   if (!hb) return "—";
-  const seconds = Math.max(0, Math.floor((Date.now() - new Date(hb).getTime()) / 1000));
+  const d = parseUtcNaive(hb);
+  if (!d) return "—";
+  const seconds = Math.max(0, Math.floor((Date.now() - d.getTime()) / 1000));
   if (seconds < 60) return `${seconds}s`;
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
   return `${Math.floor(seconds / 3600)}h`;
@@ -158,7 +172,9 @@ const sortedRows = computed(() => {
     const aRank = STATUS_RANK[a.status] ?? 99;
     const bRank = STATUS_RANK[b.status] ?? 99;
     if (aRank !== bRank) return aRank - bRank;
-    return new Date(b.last_heartbeat || 0) - new Date(a.last_heartbeat || 0);
+    const av = parseUtcNaive(a.last_heartbeat);
+    const bv = parseUtcNaive(b.last_heartbeat);
+    return (bv ? bv.getTime() : 0) - (av ? av.getTime() : 0);
   });
 });
 

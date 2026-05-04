@@ -73,33 +73,31 @@ unreadable text, no white panels in a dark shell.
 
 ## Findings (for Plan-3)
 
-### Finding D1 — ACTIVE WORKERS NumberCard shows 0 despite running workers (TZ-class bug)
+### Finding D1 — ACTIVE WORKERS NumberCard shows 0 despite running workers — FIXED in Plan-3 Phase A
 
-The Overview page's `ACTIVE WORKERS` NumberCard reads `0` even though
-two `bench --site frappe.localhost conductor worker` processes are
-running and writing heartbeats every ~10 seconds. The Workers page's
-data table (which uses a different freshness contract — most likely a
-per-row `status='ALIVE'` filter) correctly shows both. The NumberCard's
-freshness check is using `datetime.now()` (local-naive) against
-`last_heartbeat` (UTC-naive, written by `conductor.worker._now_naive`).
-On the user's UTC+3 bench, the offset alone (10 800 s) exceeds any
-plausible freshness window, so the count never matches.
+Root cause was upstream: the reaper at `conductor/scheduler_loops.py:152`
+used `datetime.now()` (local-naive) against `last_heartbeat` (UTC-naive),
+mass-marking every fresh worker GONE on non-UTC benches. The
+NumberCard's `count(status='ALIVE')` query then naturally read 0.
+Fixed by `fcc694b` (reaper threshold uses `now_naive`).
 
-This is the same bug class already documented in SUMMARY.md "Pre-existing
-finding surfaced during Plan-2" (`scheduler_loops.py:152`,
-`sweeper.py:68`, etc.). The Overview NumberCard adds at least one
-additional site under the dashboard's API surface that needs the
-UTC-naive correction. Dashboard's `Conductor Worker.heartbeat_age_seconds`
-calculation in `conductor/api/dashboard.py:373` uses
-`frappe.utils.now_datetime()` — verify whether this returns local or
-UTC, and whether the NumberCard reads from this same path or a separate
-filter.
+**Live smoke (post-A):** Overview `ACTIVE WORKERS` NumberCard = 2
+matching the two running `bench conductor worker` processes. See
+`dashboard-screenshots/post-A-overview.png`.
 
-### Finding D2 — Workers table HB age column shows hours instead of seconds
+### Finding D2 — Workers table HB age column shows hours instead of seconds — FIXED in Plan-3 Phase A
 
-The HB age column on the Workers page shows `3h` for the two ALIVE
-workers even though they heartbeat every ~10 seconds. Same root cause
-as D1 — local vs UTC stamp comparison.
+Two-sided bug. The backend half (`conductor/api/dashboard.py:373`)
+used `frappe.utils.now_datetime()` (local-naive) — fixed by `5651c73`.
+The frontend half (`dashboard/src/pages/WorkersPage.vue:148`) parsed
+the API's UTC-naive timestamp string with `new Date(hb)`, which JS
+interprets as local time, adding the host's UTC offset back as a
+phantom age. Fixed by appending `Z` to the timestamp before parsing
+so JS treats it as UTC.
+
+**Live smoke (post-A):** HB age column shows `1s, 3s` for the two
+ALIVE workers; minutes/hours for the stale GONE rows as expected.
+See `dashboard-screenshots/post-A-workers.png`.
 
 ### Finding D3 — `workflows.list_runs` receives `workflow="null"` literal
 
